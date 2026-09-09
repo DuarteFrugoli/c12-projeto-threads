@@ -1,1061 +1,867 @@
-# Planejamento do Projeto — Simulação de Civilizações com Multithreading
+# Plano do Projeto — Simulação de Civilizações com Multithreading
 
-## 1. Visão Geral
+## 1. Propósito do projeto
 
-O projeto será uma **simulação gráfica de quatro civilizações**, desenvolvida com o objetivo principal de demonstrar de forma visual e mensurável os efeitos do uso de **multithreading** no desempenho de uma aplicação.
+O projeto será uma aplicação gráfica em C# que simula quatro civilizações independentes. Seu objetivo principal é demonstrar, de forma visual e mensurável para uma turma, a diferença de desempenho entre processar a lógica com:
 
-Cada civilização possuirá uma população de agentes que crescerá progressivamente durante a execução da simulação.
+- 1 worker de simulação;
+- 2 workers de simulação;
+- 4 workers de simulação.
 
-Esses agentes realizarão tarefas simples, porém computacionalmente repetitivas, como:
+A thread principal será sempre responsável pela janela, entrada do usuário, interface e renderização. Portanto, considerando somente as threads criadas e controladas pelo projeto:
 
-- procurar recursos;
-- calcular distâncias;
-- escolher destinos;
-- se movimentar;
-- coletar recursos;
-- retornar para a base;
-- atualizar seu estado.
+| Modo | Threads de simulação | Thread principal/renderização | Total controlado pelo projeto |
+|---|---:|---:|---:|
+| 1 worker | 1 | 1 | 2 |
+| 2 workers | 2 | 1 | 3 |
+| 4 workers | 4 | 1 | 5 |
 
-Conforme a população aumenta, a quantidade de processamento necessária para atualizar a simulação também aumenta.
+O .NET e o sistema operacional podem criar outras threads internas. Por isso, a interface e a apresentação devem falar em **workers de simulação** e **threads controladas pelo projeto**, e não no total de threads exibido pelo Gerenciador de Tarefas.
 
-A aplicação permitirá comparar diferentes formas de processamento, principalmente:
-
-- **Single-thread:** uma única thread de simulação processa as quatro civilizações;
-- **Multi-thread:** cada civilização é processada por uma thread independente.
-
-A renderização continuará sendo realizada pela **thread principal**.
+O projeto não pretende ser um jogo completo. Os elementos de jogo existem para produzir uma carga de CPU paralelizável e deixar a diferença de desempenho fácil de observar.
 
 ---
 
-## 2. Objetivo do Projeto
+## 2. Decisões obrigatórias
 
-O principal objetivo é demonstrar como o uso de múltiplas threads pode melhorar o desempenho de uma aplicação quando existe uma carga de processamento que pode ser dividida entre tarefas independentes.
+Estas decisões fazem parte da especificação e não devem ficar como opções em aberto:
 
-A aplicação deverá permitir observar:
-
-- aumento da carga computacional conforme a população cresce;
-- queda do FPS no modo single-thread;
-- redução do tempo de processamento utilizando múltiplas threads;
-- diferença entre utilizar 1, 2 e 4 threads;
-- influência da quantidade de núcleos da CPU;
-- custo da sincronização entre threads;
-- situações em que adicionar novas threads deixa de produzir ganhos significativos.
-
-A proposta não é desenvolver um jogo completo, mas utilizar elementos de jogo para tornar a demonstração de multithreading mais visual e interessante.
-
----
-
-## 3. Tecnologias
-
-### Linguagem
-
-**C#**
-
-O C# será utilizado como linguagem principal do projeto.
-
-Principais motivos:
-
-- suporte nativo a multithreading;
-- API simples para criação e gerenciamento de threads;
-- suporte a `Thread`, `Task`, `lock`, `Mutex`, `Semaphore`, `Barrier` e outras estruturas de sincronização;
-- boa performance;
-- facilidade de desenvolvimento;
-- possibilidade de futuramente migrar o conceito para Unity, caso exista interesse.
+- serão sempre quatro civilizações;
+- as civilizações não interagem entre si;
+- cada civilização possui seu próprio território, agentes, base e recursos;
+- os pontos de recurso são fixos e inesgotáveis;
+- a quantidade de pontos de recurso é finita e não cresce durante a execução;
+- o tempo será medido com um cronômetro de tempo real;
+- não haverá relógio fictício, escala de tempo ou “tempo do jogo”;
+- o FPS será ilimitado pela aplicação;
+- a renderização acontecerá somente na thread principal;
+- os workers de simulação serão threads persistentes, não criadas a cada frame;
+- o crescimento populacional será suspenso quando o FPS médio chegar a 30;
+- os agentes existentes nunca serão removidos por causa de FPS baixo;
+- haverá um limite populacional absoluto como segunda proteção;
+- os modos principais da apresentação serão 1 worker e 4 workers;
+- o modo de 2 workers será mantido como comparação intermediária.
 
 ---
 
-### Plataforma
+## 3. Resultado que a apresentação deve mostrar
 
-**.NET**
+Com a mesma quantidade de agentes e o mesmo estado da simulação, a turma deverá conseguir observar que:
 
-O projeto será desenvolvido utilizando o ecossistema .NET.
+1. no modo de 1 worker, as quatro civilizações são atualizadas sequencialmente;
+2. no modo de 4 workers, cada civilização é atualizada por um worker diferente;
+3. o tempo necessário para concluir um ciclo de simulação tende a diminuir quando o trabalho é dividido entre núcleos disponíveis;
+4. a redução do tempo de simulação pode aumentar o FPS, pois a thread principal espera a conclusão da lógica antes de desenhar;
+5. o ganho não é necessariamente de quatro vezes, devido à sincronização, memória, renderização, escalonamento e partes sequenciais;
+6. o resultado depende da quantidade de núcleos e das características do computador usado.
 
-Principais namespaces que poderão ser utilizados:
-
-- `System`
-- `System.Collections.Generic`
-- `System.Diagnostics`
-- `System.Threading`
-- `System.Threading.Tasks`
+Não se deve prometer um número específico de FPS ou um ganho exato antes de medir no computador da apresentação.
 
 ---
 
-### Biblioteca Gráfica
+## 4. Tecnologias
 
-**Raylib com Raylib-cs**
+### Linguagem e plataforma
 
-A Raylib será responsável pela parte gráfica da aplicação.
+- C# 12;
+- .NET 8 (`net8.0`);
+- Raylib-cs 8.1.0;
+- configuração `Release` para as medições finais;
+- `System.Threading.Thread` para os workers controlados pelo projeto;
+- `Barrier` ou mecanismo equivalente para coordenar o começo e o fim de cada ciclo;
+- `Stopwatch` para tempo real e métricas de alta resolução.
 
-Será utilizada para:
+O projeto deverá fixar no arquivo `.csproj` a versão escolhida do .NET e a versão do pacote gráfico, evitando diferenças entre computadores.
+
+### Biblioteca gráfica
+
+Será utilizada a Raylib por meio do Raylib-cs para:
 
 - criar a janela;
-- desenhar os agentes;
-- desenhar recursos;
-- desenhar as bases;
-- desenhar as divisões entre civilizações;
-- mostrar textos;
-- mostrar FPS;
-- criar botões;
-- receber entradas de teclado e mouse;
-- construir uma interface gráfica simples.
+- receber teclado e mouse;
+- desenhar territórios, bases, recursos e agentes;
+- desenhar botões e indicadores;
+- apresentar as métricas.
 
-A Raylib **não será responsável pelo multithreading**.
-
-Todo o gerenciamento das threads será feito utilizando os recursos do próprio C#/.NET.
+A Raylib não será usada para gerenciar o paralelismo. Nenhuma chamada de desenho poderá ocorrer em um worker de simulação.
 
 ---
 
-## 4. Estrutura Visual da Simulação
+## 5. Estrutura visual
 
-A tela principal será dividida em quatro regiões.
+A janela será dividida em quatro regiões iguais:
 
-Cada região representará uma civilização.
+```text
+┌─────────────────────────┬─────────────────────────┐
+│ Civilização A — azul    │ Civilização B — vermelho│
+│                         │                         │
+│ agentes, recursos, base │ agentes, recursos, base │
+├─────────────────────────┼─────────────────────────┤
+│ Civilização C — verde   │ Civilização D — amarelo │
+│                         │                         │
+│ agentes, recursos, base │ agentes, recursos, base │
+└─────────────────────────┴─────────────────────────┘
+```
 
-Exemplo:
+Representação sugerida:
 
-    ┌─────────────────────┬─────────────────────┐
-    │                     │                     │
-    │   Civilização A     │   Civilização B     │
-    │                     │                     │
-    │    ● ● ● ●          │       ● ● ●         │
-    │       BASE          │       BASE           │
-    │                     │                     │
-    ├─────────────────────┼─────────────────────┤
-    │                     │                     │
-    │   Civilização C     │   Civilização D     │
-    │                     │                     │
-    │      ● ● ●          │      ● ● ● ●        │
-    │       BASE          │       BASE           │
-    │                     │                     │
-    └─────────────────────┴─────────────────────┘
+- pequeno quadrado/ponto: agente;
+- quadrado: ponto de recurso;
+- triângulo: base;
+- texto e barras simples para métricas.
 
-Cada civilização poderá possuir uma cor diferente.
-
-Por exemplo:
-
-- Civilização A — azul;
-- Civilização B — vermelho;
-- Civilização C — verde;
-- Civilização D — amarelo.
-
-Os habitantes poderão ser representados por círculos simples para evitar que a renderização gráfica seja desnecessariamente complexa.
+Não serão usados sprites complexos, iluminação ou efeitos que possam transformar a GPU no principal gargalo. Os agentes serão desenhados como pequenos quadrados, pois círculos geram muito mais vértices quando a população chega aos milhares.
 
 ---
 
-## 5. Estrutura de Cada Civilização
+## 6. Regras da simulação
+
+### 6.1 Civilizações
 
 Cada civilização terá:
 
+- identificador e cor;
+- território retangular próprio;
 - uma base;
-- uma lista de habitantes;
-- recursos disponíveis no território;
-- quantidade de recursos armazenados;
+- uma lista de agentes;
+- uma lista imutável de pontos de recurso;
+- contador de recursos armazenados;
 - limite populacional;
-- cor própria;
-- território próprio.
+- gerador pseudoaleatório próprio;
+- estatísticas próprias.
 
-Inicialmente, as quatro civilizações não precisarão interagir entre si.
+As quatro civilizações usarão os mesmos parâmetros. Os mapas serão equivalentes em coordenadas relativas para que nenhuma civilização receba uma carga de trabalho intencionalmente maior.
 
-Isso permitirá que cada uma seja processada de forma praticamente independente, facilitando a implementação do multithreading.
+### 6.2 Recursos infinitos
 
----
+“Recurso infinito” significa que:
 
-## 6. Funcionamento dos Agentes
+- cada território recebe uma quantidade fixa de pontos no início;
+- a posição dos pontos não muda;
+- um ponto nunca é consumido, removido ou esgotado;
+- qualquer quantidade de agentes pode escolher o mesmo ponto;
+- não existe reserva ou exclusividade de um ponto;
+- coletar cria uma unidade carregada pelo agente;
+- a quantidade armazenada na base aumenta quando o agente entrega a unidade.
 
-Cada agente poderá seguir um ciclo simples:
+A **lista de pontos é finita**, enquanto a **capacidade de cada ponto é infinita**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população.
 
-    Procurar recurso
-          ↓
-    Calcular distância
-          ↓
-    Escolher recurso
-          ↓
-    Mover até o recurso
-          ↓
-    Coletar
-          ↓
-    Retornar para a base
-          ↓
-    Entregar recurso
-          ↓
-    Procurar novo recurso
+Como os pontos são imutáveis e pertencem a uma única civilização, a busca não precisa bloquear outros workers.
 
-Cada agente possuirá informações como:
+### 6.3 Agentes
 
-- posição X;
-- posição Y;
-- velocidade;
+Cada agente terá, no mínimo:
+
+- posição;
+- velocidade em pixels por segundo;
 - estado atual;
-- destino;
-- recurso selecionado;
-- quantidade carregada;
-- civilização pertencente.
-
----
-
-## 7. Estados dos Agentes
-
-Os agentes poderão utilizar uma pequena máquina de estados.
-
-Exemplo:
-
-    Searching
-       ↓
-    MovingToResource
-       ↓
-    Collecting
-       ↓
-    ReturningToBase
-       ↓
-    Depositing
-       ↓
-    Searching
-
-Essa estrutura mantém o comportamento simples, mas cria processamento suficiente para milhares de agentes.
-
----
-
-## 8. Busca de Recursos
-
-Para aumentar a carga de processamento, cada agente poderá procurar o recurso mais próximo.
-
-Por exemplo:
-
-    Para cada recurso disponível:
-        calcular distância entre agente e recurso
-
-    escolher recurso com menor distância
-
-Se existirem muitos agentes e muitos recursos, esse processo poderá gerar uma quantidade significativa de cálculos.
-
-Isso é útil para o projeto porque cria uma carga computacional que pode ser distribuída entre múltiplas threads.
-
----
-
-## 9. Crescimento Populacional
-
-Cada civilização começará com poucos habitantes.
-
-Por exemplo:
-
-    10 habitantes
-
-Os habitantes coletarão recursos.
-
-Quando a civilização acumular recursos suficientes:
-
-    Recursos suficientes
-            ↓
-       Novo habitante
-            ↓
-      População aumenta
-            ↓
-       Mais processamento
-            ↓
-     Mais recursos coletados
-            ↓
-       População aumenta
-
-Esse ciclo fará com que a própria simulação aumente progressivamente sua carga computacional.
-
----
-
-## 10. Limite Populacional
-
-Será implementado um limite para impedir que a simulação continue criando agentes indefinidamente.
-
-Exemplo inicial:
-
-    Máximo por civilização:
-    5.000 habitantes
-
-    Total:
-    20.000 habitantes
-
-Esse valor será ajustado durante os testes.
-
-O objetivo é encontrar um valor que permita causar uma queda considerável de desempenho no modo single-thread sem provocar o travamento completo do computador.
-
----
-
-## 11. Thread Principal
-
-A thread principal será responsável principalmente por:
-
-- criar a janela;
-- receber input do usuário;
-- desenhar a interface;
-- desenhar as civilizações;
-- desenhar os agentes;
-- desenhar os recursos;
-- mostrar métricas;
-- controlar a execução geral da aplicação.
-
-A renderização deverá permanecer na thread principal.
-
----
-
-## 12. Modo Single-Thread
-
-No modo single-thread haverá apenas **uma thread responsável pela lógica das quatro civilizações**.
-
-Estrutura conceitual:
-
-    Thread Principal
-        │
-        └── Renderização
-
-    Worker Thread
-        │
-        ├── Atualiza Civilização A
-        │
-        ├── Atualiza Civilização B
-        │
-        ├── Atualiza Civilização C
-        │
-        └── Atualiza Civilização D
-
-O processamento ocorre sequencialmente:
-
-    Civilização A
-         ↓
-    Civilização B
-         ↓
-    Civilização C
-         ↓
-    Civilização D
-         ↓
-    Finaliza ciclo
-
-Quanto maior a população, maior será o tempo necessário para completar esse ciclo.
-
----
-
-## 13. Modo Multi-Thread
-
-No modo multithread, cada civilização poderá possuir uma thread responsável pelo seu processamento.
-
-Estrutura:
-
-                    Thread Principal
-                           │
-                       Renderização
-                           │
-           ┌───────────────┼───────────────┐
-           │               │               │
-         Thread 1        Thread 2        Thread 3        Thread 4
-           │               │               │               │
-          Civ A           Civ B           Civ C           Civ D
-
-As quatro civilizações poderão ser processadas simultaneamente.
-
-Depois que todas terminarem o ciclo atual, a aplicação poderá iniciar a próxima atualização.
-
----
-
-## 14. Modo com Duas Threads
-
-Caso haja tempo, também será implementado um modo intermediário.
-
-### 1 Thread
-
-    Worker 1
-    ├── Civ A
-    ├── Civ B
-    ├── Civ C
-    └── Civ D
-
-### 2 Threads
-
-    Worker 1
-    ├── Civ A
-    └── Civ B
-
-    Worker 2
-    ├── Civ C
-    └── Civ D
-
-### 4 Threads
-
-    Worker 1 → Civ A
-    Worker 2 → Civ B
-    Worker 3 → Civ C
-    Worker 4 → Civ D
-
-Isso permitirá comparar melhor o ganho de desempenho.
-
----
-
-## 15. Modos Disponíveis na Interface
-
-A interface poderá possuir botões como:
-
-    [ 1 Thread ] [ 2 Threads ] [ 4 Threads ]
-
-A troca poderá ser realizada durante a execução da simulação ou através de uma reinicialização da simulação.
-
-Idealmente, a troca ocorrerá durante a execução para tornar a demonstração mais interessante.
-
----
-
-## 16. Sincronização
-
-Como múltiplas threads estarão processando dados simultaneamente, será necessário garantir que a thread de renderização não leia estruturas enquanto elas estão em um estado inconsistente.
-
-Uma abordagem possível será utilizar ciclos de simulação sincronizados.
-
-Exemplo:
-
-    Estado atual
-         ↓
-    Workers começam processamento
-         ↓
-    Civ A terminada
-    Civ B terminada
-    Civ C terminada
-    Civ D terminada
-         ↓
-    Sincronização
-         ↓
-    Estado pronto
-         ↓
-    Renderização
-
-Recursos como `Barrier`, `lock` ou outras estruturas de sincronização poderão ser utilizados.
-
----
-
-## 17. Separação entre Lógica e Renderização
-
-A lógica da simulação deverá ser separada da parte gráfica.
-
-As threads de simulação não deverão realizar chamadas de renderização.
-
-Por exemplo:
-
-### Threads de Simulação
-
-Responsáveis por:
-
-- movimentação;
-- decisões;
-- busca de recursos;
-- coleta;
-- criação de habitantes;
-- atualização de estados.
-
-### Thread Principal
-
-Responsável por:
-
-- desenhar;
-- receber input;
-- mostrar métricas;
-- atualizar interface.
-
----
-
-## 18. Estrutura de Classes
-
-Estrutura inicial sugerida:
-
-    src/
-    │
-    ├── Program.cs
-    │
-    ├── Core/
-    │   ├── Game.cs
-    │   ├── Simulation.cs
-    │   └── SimulationMode.cs
-    │
-    ├── Entities/
-    │   ├── Agent.cs
-    │   ├── Civilization.cs
-    │   ├── Resource.cs
-    │   └── Base.cs
-    │
-    ├── Simulation/
-    │   ├── SingleThreadSimulation.cs
-    │   ├── MultiThreadSimulation.cs
-    │   └── SimulationWorker.cs
-    │
-    ├── Rendering/
-    │   ├── Renderer.cs
-    │   └── UserInterface.cs
-    │
-    ├── Metrics/
-    │   └── PerformanceMetrics.cs
-    │
-    └── Utils/
-        └── Constants.cs
-
----
-
-## 19. Classe Agent
-
-Responsável por representar cada habitante.
-
-Exemplo de informações armazenadas:
-
-    Agent
-    ├── Position
-    ├── Velocity
-    ├── State
-    ├── Target
-    ├── ResourceCarried
-    └── CivilizationId
-
-Métodos possíveis:
-
-    Update()
-    FindResource()
-    Move()
-    Collect()
-    ReturnToBase()
-
----
-
-## 20. Classe Civilization
-
-Responsável pelos dados de uma civilização.
-
-Estrutura:
-
-    Civilization
-    ├── Agents
-    ├── Resources
-    ├── Base
-    ├── StoredResources
-    ├── Population
-    ├── PopulationLimit
-    └── Color
-
-Métodos:
-
-    Update()
-    SpawnAgent()
-    AddResource()
-    UpdateAgents()
-
----
-
-## 21. Classe Simulation
-
-Responsável pelas regras gerais da simulação.
-
-Ela poderá controlar:
-
-- início;
-- pausa;
-- reinício;
-- velocidade da simulação;
-- quantidade de civilizações;
-- modo de processamento;
-- limite populacional.
-
----
-
-## 22. SingleThreadSimulation
-
-Implementará a versão sequencial.
-
-Exemplo conceitual:
-
-    foreach civilization:
-        civilization.Update()
-
-Todas serão atualizadas pela mesma thread.
-
----
-
-## 23. MultiThreadSimulation
-
-Implementará a versão paralela.
-
-Exemplo:
-
-    Thread 1 → Civilization A
-    Thread 2 → Civilization B
-    Thread 3 → Civilization C
-    Thread 4 → Civilization D
-
-Após todas terminarem:
-
-    Barrier
-       ↓
-    próximo ciclo
-
----
-
-## 24. Renderer
-
-Responsável exclusivamente pela parte visual.
-
-Deverá desenhar:
-
-- fundo;
-- divisões das civilizações;
-- agentes;
-- recursos;
-- bases;
-- interface;
-- métricas.
-
----
-
-## 25. PerformanceMetrics
-
-Será responsável por medir os resultados do experimento.
-
-Métricas:
-
-- FPS;
-- frame time;
-- simulation time;
-- quantidade de agentes;
-- quantidade de threads;
-- população de cada civilização;
-- tempo médio de atualização.
-
----
-
-## 26. Métrica Principal
-
-O FPS será uma métrica visual importante, mas não deverá ser a única.
-
-A principal métrica para demonstrar o multithreading deverá ser:
-
-**Simulation Time**
-
-Exemplo:
-
-    Single-thread
-
-    Simulation Time: 28 ms
-
-    Multi-thread
-
-    Simulation Time: 9 ms
-
-Isso permite demonstrar diretamente quanto tempo a CPU leva para atualizar a lógica da simulação.
-
----
-
-## 27. Interface
-
-Exemplo:
-
-    ------------------------------------------------
-
-    Civilization Thread Simulation
-
-    FPS: 43
-    Frame Time: 23.2 ms
-    Simulation Time: 17.8 ms
-
-    Population: 8.432
-    Threads: 1
-
-    [ 1 Thread ]
-    [ 2 Threads ]
-    [ 4 Threads ]
-
-    [ Pause ]
-    [ Restart ]
-    [ Stress Test ]
-
-    ------------------------------------------------
-
----
-
-## 28. Stress Test
-
-Será criado um botão para aumentar rapidamente a carga da simulação.
-
-Exemplo:
-
-    [ STRESS TEST ]
-
-Ao clicar:
-
-    Population:
-    500 → 10.000
-
-Isso permitirá realizar a demonstração sem precisar esperar vários minutos para que as civilizações cresçam naturalmente.
-
----
-
-## 29. Controle Manual da População
-
-Também poderá existir uma forma de aumentar ou diminuir a população.
-
-Exemplo:
-
-    Population
-
-    [-] 5000 [+]
-
-Ou atalhos:
-
-    1 → 500 agentes
-    2 → 2.000 agentes
-    3 → 5.000 agentes
-    4 → 10.000 agentes
-    5 → 20.000 agentes
-
----
-
-## 30. Comportamento Esperado
-
-Com pouca população, a diferença entre single-thread e multithread provavelmente será pequena.
-
-Exemplo hipotético:
-
-    500 agentes
-
-    1 Thread:
-    120 FPS
-
-    4 Threads:
-    120 FPS
-
-Com uma população maior:
-
-    5.000 agentes
-
-    1 Thread:
-    55 FPS
-
-    4 Threads:
-    90 FPS
-
-Com carga elevada:
-
-    15.000 agentes
-
-    1 Thread:
-    25 FPS
-
-    4 Threads:
-    60 FPS
-
-Os números acima são apenas exemplos.
-
-Os valores reais dependerão do hardware e da implementação.
-
----
-
-## 31. Ganho Não Linear
-
-Não será esperado que:
-
-    2 threads = 2x desempenho
-
-ou:
-
-    4 threads = 4x desempenho
-
-Existem outros custos envolvidos:
-
-- renderização;
-- sincronização;
-- criação e gerenciamento das threads;
-- acesso à memória;
-- escalonamento do sistema operacional;
-- quantidade de núcleos físicos da CPU;
-- partes do programa que continuam sequenciais.
-
-Esse comportamento também será discutido durante a apresentação.
-
----
-
-## 32. Controle de FPS
-
-A aplicação poderá permitir limitar ou liberar o FPS.
-
-Durante os testes de desempenho, pode ser interessante deixar o FPS desbloqueado para observar melhor as diferenças entre os modos.
-
-Exemplo:
-
-    FPS Limit: Unlimited
-
-Ou:
-
-    FPS Limit: 144
-
----
-
-## 33. Objetivo Visual
-
-A aplicação deverá possuir gráficos simples.
-
-Não será necessário utilizar sprites detalhados.
-
-Exemplo:
-
-    ● = habitante
-    ■ = recurso
-    ▲ = base
-
-A simplicidade gráfica também ajuda a garantir que a maior parte do gargalo venha da lógica de simulação, e não da GPU.
-
----
-
-## 34. MVP
-
-O primeiro objetivo será implementar apenas o necessário para demonstrar multithreading.
-
-### MVP obrigatório
-
-- [ ] Criar projeto C#
-- [ ] Configurar Raylib-cs
-- [ ] Criar janela
-- [ ] Dividir a tela em quatro regiões
-- [ ] Criar quatro civilizações
-- [ ] Criar agentes
-- [ ] Fazer agentes se movimentarem
-- [ ] Fazer população crescer
-- [ ] Criar limite populacional
-- [ ] Criar modo single-thread
-- [ ] Criar modo com quatro threads
-- [ ] Permitir selecionar o modo
-- [ ] Mostrar FPS
-- [ ] Mostrar tempo de simulação
-- [ ] Mostrar população
-- [ ] Mostrar quantidade de threads
-
-Quando essa etapa estiver pronta, o requisito principal do projeto estará cumprido.
-
----
-
-## 35. Funcionalidades de Prioridade Alta
-
-Depois do MVP:
-
-- [ ] adicionar recursos no mapa;
-- [ ] agentes procurarem recurso mais próximo;
-- [ ] agentes coletarem recursos;
-- [ ] agentes retornarem para a base;
-- [ ] crescimento populacional depender de recursos;
-- [ ] adicionar modo com duas threads;
-- [ ] adicionar botão Stress Test;
-- [ ] adicionar pausa;
-- [ ] adicionar reinício.
-
----
-
-## 36. Funcionalidades Extras
-
-Caso sobre tempo:
-
-- diferentes taxas de crescimento;
-- velocidade configurável da simulação;
-- gráficos de desempenho;
-- estatísticas individuais das civilizações;
-- diferentes tipos de recursos;
-- diferentes comportamentos de agentes;
-- morte de agentes;
-- reprodução;
-- eventos aleatórios.
-
----
-
-## 37. Funcionalidades que Devem Ser Evitadas Inicialmente
-
-Para manter o escopo controlado:
-
+- destino atual;
+- identificador do recurso escolhido;
+- indicação de que está carregando uma unidade;
+- instante real em que começou a coleta;
+- identificador da civilização.
+
+Estados:
+
+```text
+Searching
+    ↓
+MovingToResource
+    ↓
+Collecting
+    ↓
+ReturningToBase
+    ↓
+Depositing
+    ↓
+Searching
+```
+
+Comportamento:
+
+1. o agente sem carga percorre os pontos de recurso da sua civilização;
+2. calcula a distância até cada ponto;
+3. escolhe o ponto mais próximo;
+4. move-se até ele;
+5. aguarda o tempo real de coleta;
+6. carrega uma unidade;
+7. retorna à base;
+8. deposita a unidade e reinicia o ciclo.
+
+Para manter uma carga computacional contínua, previsível e visível, todos os agentes recalcularão o recurso mais próximo a cada atualização. Quando um agente estiver carregando uma unidade, o resultado ficará preparado como destino da próxima viagem. O cálculo deverá ser realmente utilizado. A distância ao quadrado pode ser usada para evitar `sqrt`, desde que o mesmo algoritmo seja usado em todos os modos.
+
+Não haverá inicialmente:
+
+- colisão entre agentes;
+- pathfinding avançado;
 - combate;
-- guerras;
+- morte;
+- reprodução entre agentes;
+- interação entre civilizações.
+
+### 6.4 Crescimento populacional
+
+Uma civilização poderá criar um agente quando:
+
+- possuir recursos armazenados suficientes;
+- estiver abaixo do limite populacional absoluto;
+- o intervalo real mínimo desde o último nascimento tiver passado;
+- o controlador de segurança permitir crescimento.
+
+Ao criar um agente, o custo será retirado dos recursos armazenados. Quando o crescimento estiver bloqueado por FPS baixo, os recursos continuarão sendo coletados, mas não serão gastos. Ao voltar a permitir crescimento, o intervalo mínimo entre nascimentos continuará valendo para impedir a criação de muitos agentes no mesmo frame.
+
+---
+
+## 7. Cronômetro e tempo real
+
+O projeto não terá um relógio “in game”. Todo tempo será derivado de `Stopwatch`, que é monotônico e apropriado para medir intervalos.
+
+Serão mantidas duas medidas:
+
+- **tempo real de execução ativa:** tempo de cronômetro desde o início, descontando períodos em que o usuário pausou;
+- **delta real:** intervalo real entre duas atualizações consecutivas, enviado pela thread principal aos workers.
+
+Regras:
+
+- velocidades serão expressas em pixels por segundo;
+- coleta e intervalo de nascimento serão expressos em segundos reais;
+- não haverá multiplicador de velocidade do tempo;
+- não haverá contagem de dias, anos ou turnos fictícios;
+- ao pausar, os workers não atualizam agentes e o cronômetro de execução ativa é pausado;
+- ao continuar, a janela de FPS é reiniciada para que o tempo de pausa não contamine a medição;
+- o relógio exibido será identificado como `Tempo real`, no formato `mm:ss.fff`.
+
+O número interno do ciclo poderá existir apenas como contador técnico para depuração e testes. Ele não representa tempo da simulação e não deverá aparecer como relógio para o usuário.
+
+---
+
+## 8. FPS ilimitado
+
+A aplicação não imporá limite de FPS.
+
+Regras obrigatórias:
+
+- não chamar `SetTargetFPS`;
+- não inserir `Thread.Sleep`, espera artificial ou atraso no loop de renderização;
+- não solicitar VSync pela aplicação;
+- não oferecer botão ou configuração de limite de FPS;
+- medir e mostrar o FPS realmente produzido;
+- medir o frame time com `Stopwatch`.
+
+O sistema operacional, o compositor de janelas ou o driver podem impor restrições externas. A aplicação apenas garante que não adicionará um limitador próprio.
+
+O FPS será calculado sobre uma janela móvel de 1 segundo de tempo real, evitando decisões baseadas em um único frame.
+
+---
+
+## 9. Proteção de desempenho e limite populacional
+
+Existirão duas proteções independentes.
+
+### 9.1 Limite absoluto
+
+Valor inicial sugerido:
+
+- máximo de 5.000 agentes por civilização;
+- máximo de 20.000 agentes no total.
+
+Os valores poderão ser reduzidos após os testes no computador da apresentação. Nenhum controle, inclusive o Stress Test, poderá ultrapassar esse limite.
+
+### 9.2 Bloqueio adaptativo aos 30 FPS
+
+O controlador observará o FPS médio da janela móvel de 1 segundo.
+
+- se o FPS médio for **menor ou igual a 30**, todo surgimento de novos agentes será suspenso;
+- os agentes existentes continuarão se movimentando, procurando e coletando;
+- os recursos continuarão sendo armazenados;
+- nenhum agente será removido;
+- a interface mostrará `Crescimento pausado — FPS baixo`;
+- o Stress Test e qualquer comando manual também deverão respeitar o bloqueio.
+
+Para evitar que o sistema ligue e desligue o crescimento repetidamente próximo de 30 FPS, será usada histerese:
+
+- bloquear em `FPS médio <= 30`;
+- liberar somente após `FPS médio >= 35` durante 2 segundos consecutivos.
+
+Depois de liberar, os agentes surgirão respeitando o intervalo normal ou o intervalo do Stress Test. Não haverá criação acumulada em massa no primeiro frame.
+
+Esse mecanismo reduz o risco de crescimento descontrolado, mas não promete que o FPS nunca terá uma queda momentânea abaixo de 30, pois outras aplicações, o sistema operacional e a renderização também podem causar oscilações.
+
+Estados possíveis do crescimento:
+
+```text
+Enabled
+BlockedByLowFps
+BlockedByPopulationLimit
+PausedByUser
+DisabledForBenchmark
+```
+
+---
+
+## 10. Modelo de execução por frame
+
+O projeto utilizará um modelo sincronizado e fácil de explicar em sala. Simulação e renderização não alteram o mesmo estado ao mesmo tempo.
+
+Fluxo da thread principal:
+
+```text
+Ler o cronômetro e calcular o delta real
+        ↓
+Receber input
+        ↓
+Preparar o comando do ciclo
+        ↓
+Liberar os workers ativos
+        ↓
+Aguardar todos concluírem
+        ↓
+Registrar o tempo da simulação
+        ↓
+Renderizar o estado estável
+        ↓
+Atualizar FPS e interface
+        ↓
+Repetir sem limitar o FPS
+```
+
+Enquanto a thread principal desenha, os workers aguardam o próximo ciclo. Assim:
+
+- a renderização nunca encontra uma lista sendo modificada;
+- não é necessário aplicar `lock` em cada agente;
+- o custo da sincronização fica visível nas métricas;
+- o frame completo inclui a espera pela simulação, tornando o efeito sobre o FPS observável.
+
+O tempo da simulação será medido na thread principal desde a liberação do trabalho até a conclusão de todos os workers. Essa é uma medida de tempo decorrido real, não a soma do tempo de CPU de cada worker.
+
+---
+
+## 11. Modos de threading
+
+### 11.1 Um worker de simulação
+
+```text
+Thread principal → input, coordenação, interface e renderização
+Worker 1         → civilizações A, B, C e D, nessa ordem
+```
+
+As quatro civilizações são processadas sequencialmente pelo mesmo worker. Existem duas threads controladas pelo projeto: uma principal e uma de simulação.
+
+### 11.2 Dois workers de simulação
+
+```text
+Thread principal → input, coordenação, interface e renderização
+Worker 1         → civilizações A e B
+Worker 2         → civilizações C e D
+```
+
+Existem três threads controladas pelo projeto.
+
+### 11.3 Quatro workers de simulação
+
+```text
+Thread principal → input, coordenação, interface e renderização
+Worker 1         → civilização A
+Worker 2         → civilização B
+Worker 3         → civilização C
+Worker 4         → civilização D
+```
+
+Existem cinco threads controladas pelo projeto.
+
+### 11.4 Ciclo de vida dos workers
+
+- os workers serão criados com `Thread`, e não por meio de tarefas livres do ThreadPool;
+- permanecerão vivos e aguardando trabalho entre ciclos;
+- nunca serão criados novamente a cada frame;
+- receberão nomes como `Simulation Worker 1`;
+- uma exceção em qualquer worker será capturada, exibida e encerrará o coordenador de forma segura;
+- ao fechar ou reiniciar, todos receberão cancelamento e a aplicação aguardará `Join`;
+- nenhuma thread poderá permanecer executando depois do fechamento da janela.
+
+### 11.5 Troca de modo durante a execução
+
+A troca entre 1, 2 e 4 workers será permitida, mas somente entre ciclos:
+
+1. concluir o ciclo atual;
+2. impedir o início de outro ciclo;
+3. encerrar e aguardar os workers antigos;
+4. criar o novo conjunto de workers;
+5. preservar o estado das civilizações;
+6. reiniciar a janela de métricas;
+7. executar um curto período de aquecimento antes de exibir comparações.
+
+O tempo gasto criando ou encerrando threads não fará parte do `Simulation Time` normal. A interface mostrará `Aquecendo métricas...` durante a estabilização.
+
+---
+
+## 12. Propriedade dos dados e segurança entre threads
+
+Cada civilização será atualizada por somente um worker em cada ciclo. Esse worker será o único autorizado a modificar:
+
+- agentes da civilização;
+- recursos armazenados;
+- estado da base;
+- nascimento de agentes;
+- estatísticas internas da civilização.
+
+Os pontos de recurso serão imutáveis depois da inicialização. Cada civilização terá seu próprio gerador pseudoaleatório; não haverá um `Random` global compartilhado.
+
+A thread principal só lerá o estado depois que todos os workers concluírem o ciclo e antes de liberá-los novamente. Essa regra é preferível a espalhar `lock` pelas entidades.
+
+A sincronização deverá aceitar cancelamento para evitar deadlock ao fechar, reiniciar ou trocar o modo. Qualquer falha em um worker deve liberar a thread principal da espera e produzir uma mensagem de erro compreensível.
+
+---
+
+## 13. Métricas
+
+A interface mostrará:
+
+- FPS médio da última janela de 1 segundo;
+- frame time médio em milissegundos;
+- tempo do último ciclo de simulação;
+- média, mediana e percentil 95 do `Simulation Time`;
+- tempo de renderização;
+- atualizações concluídas por segundo;
+- população total e por civilização;
+- workers de simulação ativos;
+- threads controladas pelo projeto;
+- tempo real de execução ativa;
+- estado do crescimento populacional;
+- limite populacional;
+- quantidade de pontos de recurso;
+- recursos armazenados por civilização.
+
+Definições:
+
+- `Simulation Time`: tempo real entre liberar os workers e todos terminarem;
+- `Render Time`: tempo gasto desenhando o frame;
+- `Frame Time`: tempo real completo entre frames;
+- `Updates/s`: ciclos completos por segundo;
+- `Speedup(N) = mediana com 1 worker / mediana com N workers`;
+- `Eficiência(N) = Speedup(N) / N`.
+
+O FPS é importante para a demonstração visual, mas a métrica principal para provar o benefício da paralelização será o `Simulation Time`. Se a renderização se tornar o gargalo, o tempo da simulação ainda permitirá avaliar corretamente os workers.
+
+As métricas usarão buffers circulares ou acumuladores reutilizáveis. Não deverá haver criação de listas e objetos a cada frame apenas para calcular estatísticas.
+
+---
+
+## 14. Interface
+
+Exemplo de painel:
+
+```text
+Simulação de Civilizações — Multithreading
+
+Tempo real: 02:31.482
+FPS: 42.7 (ilimitado)       Frame: 23.4 ms
+Simulação: 14.8 ms          Renderização: 8.1 ms
+Simulação p50/p95: 14.5 / 16.2 ms
+Atualizações/s: 42.7
+
+População: 8.432 / 20.000
+Workers de simulação: 1
+Threads do projeto: 2 (1 principal + 1 worker)
+Crescimento: ATIVO
+
+[1 worker] [2 workers] [4 workers]
+[Pausar] [Reiniciar] [Stress Test]
+```
+
+Quando necessário:
+
+```text
+Crescimento: PAUSADO — FPS médio <= 30
+Será retomado após FPS >= 35 por 2 segundos.
+```
+
+Não haverá controle de limite de FPS.
+
+---
+
+## 15. Controles
+
+### Seleção de workers
+
+- botões para 1, 2 e 4 workers;
+- teclas `1`, `2` e `4` como atalhos;
+- modo selecionado destacado;
+- troca segura no fim do ciclo;
+- estado atual preservado;
+- métricas reiniciadas após a troca.
+
+### Pausa
+
+- para as atualizações e os nascimentos;
+- mantém a janela e a interface responsivas;
+- pausa o cronômetro de execução ativa;
+- reinicia a janela de medição de FPS ao continuar.
+
+### Reinício
+
+- encerra os workers atuais;
+- recria o mundo com a mesma seed configurada;
+- restaura população, recursos e métricas iniciais;
+- inicia novamente no modo de workers selecionado.
+
+### Stress Test
+
+O Stress Test não adicionará milhares de agentes em um único frame. Ele ativará um crescimento acelerado em lotes pequenos e periódicos.
+
+O Stress Test:
+
+- injeta agentes sem consumir o estoque de recursos, pois é uma ferramenta de demonstração;
+- respeita o limite absoluto;
+- respeita o bloqueio aos 30 FPS;
+- para de criar agentes imediatamente quando o crescimento é bloqueado;
+- mostra visualmente que está ativo;
+- pode ser desligado pelo usuário;
+- não remove os agentes já criados.
+
+Isso permite aproximar a aplicação do limite com segurança e sem uma queda abrupta causada por uma única alocação enorme.
+
+---
+
+## 16. Parâmetros iniciais configuráveis
+
+Os valores abaixo são pontos de partida. Devem ficar centralizados em `SimulationConfig` e ser calibrados no computador da apresentação, sem alterar as regras entre os modos.
+
+| Parâmetro | Valor inicial sugerido |
+|---|---:|
+| Civilizações | 4 |
+| População inicial por civilização | 10 |
+| Pontos de recurso por civilização | 768 |
+| Capacidade do ponto de recurso | Infinita |
+| Unidade carregada por viagem | 1 |
+| Custo inicial de um agente | 10 unidades |
+| Duração real da coleta | 0,25 s |
+| Velocidade do agente | 80 px/s |
+| Limite por civilização | 5.000 |
+| Limite total | 20.000 |
+| Janela de FPS | 1 s |
+| Bloqueio de crescimento | FPS médio <= 30 |
+| Liberação de crescimento | FPS médio >= 35 por 2 s |
+| Aquecimento após trocar workers | 2 s |
+
+Se a diferença entre os modos não for visível, deverá ser ajustada primeiro a quantidade fixa de pontos examinados por agente ou a população do cenário. Não se deve adicionar `Sleep`, espera artificial ou um algoritmo diferente em cada modo.
+
+---
+
+## 17. Organização sugerida do código
+
+```text
+src/
+├── Program.cs
+├── Core/
+│   ├── Game.cs
+│   ├── SimulationConfig.cs
+│   └── SimulationState.cs
+├── Entities/
+│   ├── Agent.cs
+│   ├── AgentState.cs
+│   ├── Civilization.cs
+│   ├── ResourceNode.cs
+│   └── CivilizationBase.cs
+├── Simulation/
+│   ├── SimulationCoordinator.cs
+│   ├── SimulationWorker.cs
+│   ├── WorkerMode.cs
+│   ├── PopulationGrowthController.cs
+│   └── SimulationClock.cs
+├── Rendering/
+│   ├── Renderer.cs
+│   └── UserInterface.cs
+├── Metrics/
+│   ├── PerformanceMetrics.cs
+│   ├── RollingWindow.cs
+│   └── BenchmarkResult.cs
+└── Diagnostics/
+    └── BenchmarkRunner.cs
+```
+
+Responsabilidades principais:
+
+- `Game`: loop principal, input e ciclo de vida;
+- `SimulationState`: contém as quatro civilizações;
+- `SimulationCoordinator`: distribui civilizações e sincroniza workers;
+- `SimulationWorker`: atualiza somente as civilizações atribuídas;
+- `SimulationClock`: fornece delta e tempo real ativo;
+- `PopulationGrowthController`: aplica custo, intervalos e proteções;
+- `Renderer`: somente desenho;
+- `PerformanceMetrics`: coleta métricas sem controlar a simulação;
+- `BenchmarkRunner`: executa cenários repetíveis.
+
+Não é necessário criar classes separadas para uma simulação de 1 e 4 workers. Um único coordenador com atribuições diferentes reduz duplicação e garante que todos os modos executem exatamente a mesma lógica.
+
+---
+
+## 18. Dois tipos de demonstração
+
+### 18.1 Demonstração ao vivo com crescimento
+
+Essa é a parte visual da apresentação:
+
+1. iniciar com 1 worker e poucos agentes;
+2. ativar crescimento normal ou Stress Test;
+3. observar o aumento do `Simulation Time` e a queda do FPS;
+4. ao chegar a 30 FPS, mostrar o bloqueio automático de novos agentes;
+5. anotar população e métricas atuais;
+6. trocar para 4 workers, preservando exatamente o mesmo estado;
+7. aguardar o período de aquecimento;
+8. observar a redução do tempo de simulação e a recuperação do FPS;
+9. quando o FPS permanecer acima de 35, mostrar a retomada automática do crescimento.
+
+Essa sequência comunica visualmente por que o paralelismo ajuda.
+
+### 18.2 Benchmark controlado
+
+Essa etapa fornece números comparáveis. O crescimento automático ficará desativado e cada execução começará a partir do mesmo estado.
+
+Para cada população segura escolhida:
+
+1. usar a mesma seed;
+2. usar as mesmas posições e estados dos agentes;
+3. usar a mesma quantidade e posição dos recursos;
+4. executar com 1, 2 e 4 workers;
+5. aquecer por pelo menos 3 segundos;
+6. medir por pelo menos 10 segundos;
+7. repetir cada caso três vezes;
+8. registrar mediana e p95;
+9. executar em `Release`, fora do depurador;
+10. registrar CPU, quantidade de núcleos lógicos, memória e sistema operacional.
+
+Tabela de resultados:
+
+| População | Workers | Simulation p50 | Simulation p95 | FPS médio | Updates/s | Speedup |
+|---:|---:|---:|---:|---:|---:|---:|
+| a medir | 1 | — | — | — | — | 1,00x |
+| a medir | 2 | — | — | — | — | — |
+| a medir | 4 | — | — | — | — | — |
+
+Não preencher a documentação com resultados hipotéticos como se fossem reais.
+
+### 18.3 Resultados verificados em 08/09/2026
+
+Ambiente da medição:
+
+- Windows 10.0.26200;
+- .NET 8.0.31;
+- processo x64;
+- 16 processadores lógicos disponíveis;
+- build `Release`, fora do depurador;
+- 4.000 agentes no total;
+- 768 pontos de recurso inesgotáveis por civilização;
+- aquecimento de 3 segundos;
+- três repetições de 10 segundos por modo.
+
+| População total | Workers | Simulation p50 | Simulation p95 | Speedup |
+|---:|---:|---:|---:|---:|
+| 4.000 | 1 | 6,613 ms | 7,798 ms | 1,00x |
+| 4.000 | 2 | 3,427 ms | 5,058 ms | 1,93x |
+| 4.000 | 4 | 2,546 ms | 2,717 ms | 2,60x |
+
+Calibração gráfica oculta com a população máxima de 20.000 agentes:
+
+| Workers | FPS médio | Simulation Time médio | Render Time médio |
+|---:|---:|---:|---:|
+| 1 | 25,0 | 37,30 ms | 4,88 ms |
+| 4 | 66,0 | 11,66 ms | 4,20 ms |
+
+Esses valores confirmam no computador atual que a carga atravessa a região de 30 FPS com 1 worker e se recupera claramente com 4 workers. A calibração deverá ser repetida se a apresentação usar outro computador.
+
+---
+
+## 19. Etapas de implementação
+
+### Etapa 1 — Estrutura mínima
+
+- [x] criar solução e projeto C#;
+- [x] fixar versões no `.csproj`;
+- [x] configurar Raylib-cs;
+- [x] criar a janela;
+- [x] manter o FPS ilimitado;
+- [x] dividir a tela em quatro territórios;
+- [x] implementar o cronômetro de tempo real.
+
+### Etapa 2 — Mundo e agentes
+
+- [x] criar quatro civilizações determinísticas;
+- [x] criar bases;
+- [x] criar pontos de recurso fixos e inesgotáveis;
+- [x] criar agentes e estados;
+- [x] implementar busca, movimento, coleta, retorno e depósito;
+- [x] confirmar que a quantidade de pontos nunca diminui ou aumenta.
+
+### Etapa 3 — Crescimento seguro
+
+- [x] implementar custo de nascimento;
+- [x] implementar intervalo real entre nascimentos;
+- [x] implementar limite por civilização e limite total;
+- [x] calcular FPS médio em janela de 1 segundo;
+- [x] bloquear crescimento em 30 FPS;
+- [x] liberar em 35 FPS após 2 segundos;
+- [x] implementar Stress Test gradual e seguro.
+
+### Etapa 4 — Multithreading
+
+- [x] criar workers persistentes;
+- [x] implementar coordenação cancelável;
+- [x] implementar atribuição para 1 worker;
+- [x] implementar atribuição para 2 workers;
+- [x] implementar atribuição para 4 workers;
+- [x] implementar troca segura entre ciclos;
+- [x] garantir encerramento e `Join` de todos os workers.
+
+### Etapa 5 — Interface e métricas
+
+- [x] mostrar FPS e frame time;
+- [x] mostrar tempo de simulação e renderização;
+- [x] mostrar p50, p95 e updates/s;
+- [x] mostrar população e estado do crescimento;
+- [x] mostrar workers e threads controladas pelo projeto;
+- [x] implementar pausa e reinício;
+- [x] destacar aquecimento e FPS baixo.
+
+### Etapa 6 — Benchmark e preparação da apresentação
+
+- [x] criar cenários determinísticos de população fixa;
+- [x] automatizar período de aquecimento e coleta;
+- [x] exportar ou copiar tabela de resultados;
+- [ ] testar em `Release` no computador da apresentação;
+- [x] calibrar população e quantidade de recursos no computador atual;
+- [ ] repetir a calibração no computador da apresentação, caso seja outro;
+- [ ] ensaiar a sequência de 1 para 4 workers;
+- [ ] testar fechamento, reinício e troca de modo repetidamente.
+
+---
+
+## 20. Critérios de aceitação
+
+O projeto estará pronto quando todos os itens abaixo forem verdadeiros:
+
+### Funcionamento
+
+- [x] existem quatro civilizações visíveis e independentes;
+- [x] agentes completam todo o ciclo de coleta;
+- [x] pontos de recurso nunca acabam;
+- [x] o cronômetro corresponde ao tempo real de execução ativa;
+- [x] pausa e continuação não causam saltos de tempo;
+- [x] o FPS não é limitado pela aplicação;
+- [x] crescimento para quando o FPS médio chega a 30;
+- [x] crescimento só volta nas condições de recuperação definidas;
+- [x] nenhuma forma de nascimento ignora o limite absoluto;
+- [x] Stress Test não cria uma quantidade enorme em um único frame.
+
+### Concorrência
+
+- [x] o modo 1 usa um worker para as quatro civilizações;
+- [x] o modo 4 usa exatamente quatro workers de simulação;
+- [x] somente a thread principal chama a Raylib para desenhar;
+- [x] trocar o modo não perde nem duplica agentes;
+- [ ] reiniciar ou fechar não deixa workers ativos;
+- [x] não ocorrem deadlocks após trocas repetidas;
+- [x] os modos executam a mesma lógica e produzem o mesmo resultado para o mesmo estado e delta.
+
+### Medição e apresentação
+
+- [x] `Simulation Time` mede tempo real até todos os workers terminarem;
+- [x] construção de threads não entra na medição normal;
+- [x] métricas são reiniciadas e aquecidas após troca de modo;
+- [x] benchmark usa estado, seed e população iguais;
+- [x] resultados finais foram coletados em `Release` no computador atual;
+- [x] a interface diferencia workers de simulação das threads internas do .NET;
+- [x] a diferença entre 1 e 4 workers é observável no computador atual;
+- [ ] confirmar a diferença no computador da apresentação, caso seja outro.
+
+---
+
+## 21. Riscos e respostas
+
+### A renderização se tornar o gargalo
+
+Resposta:
+
+- usar formas simples;
+- evitar texto individual por agente;
+- medir `Render Time` separadamente;
+- usar `Simulation Time` como métrica principal;
+- ajustar a carga de busca antes de aumentar a complexidade gráfica.
+
+### Pouca diferença entre 1 e 4 workers
+
+Resposta:
+
+- confirmar que o computador possui núcleos disponíveis;
+- executar em `Release` e sem depurador;
+- aumentar igualmente os pontos fixos examinados por agente;
+- aumentar a população com o Stress Test;
+- confirmar que os workers são persistentes;
+- verificar se renderização ou coleta de lixo dominam o frame.
+
+### Pausas causadas pelo coletor de lixo
+
+Resposta:
+
+- pré-alocar capacidade das listas;
+- evitar LINQ e alocações no loop dos agentes;
+- reutilizar buffers de métricas;
+- não criar objetos temporários durante cálculos de distância.
+
+### Um worker receber mais trabalho
+
+Resposta:
+
+- iniciar civilizações com parâmetros equivalentes;
+- mostrar população por civilização;
+- no benchmark, usar a mesma população em todas;
+- registrar o tempo individual de cada worker apenas como diagnóstico.
+
+### Queda abrupta abaixo de 30 FPS
+
+Resposta:
+
+- calcular FPS em uma janela curta e estável;
+- adicionar agentes em lotes pequenos;
+- bloquear todas as fontes de nascimento;
+- manter também o limite populacional absoluto;
+- calibrar o Stress Test no computador da apresentação.
+
+---
+
+## 22. Fora do escopo inicial
+
+- combate e guerras;
 - diplomacia;
-- construção complexa;
-- árvore tecnológica;
 - economia complexa;
+- construção de cidades;
+- árvore tecnológica;
+- mapa procedural;
 - pathfinding avançado;
 - interação entre civilizações;
-- mapa procedural;
-- multiplayer.
+- multiplayer;
+- recursos escassos ou regeneráveis;
+- relógio de dias, anos ou eras;
+- limite configurável de FPS;
+- troca da lógica por algoritmos diferentes conforme o modo de workers.
 
-Esses elementos podem ser adicionados futuramente, mas não ajudam diretamente na demonstração de multithreading.
-
----
-
-## 38. Fluxo da Aplicação
-
-Fluxo aproximado:
-
-    Inicialização
-         ↓
-    Criar janela
-         ↓
-    Criar quatro civilizações
-         ↓
-    Criar população inicial
-         ↓
-    Iniciar simulação
-         ↓
-    ┌───────────────────────────────┐
-    │ Atualizar lógica             │
-    │ Sincronizar workers          │
-    │ Atualizar métricas           │
-    │ Renderizar                   │
-    │ Receber input                │
-    └───────────────────────────────┘
-         ↓
-    Repetir até fechar aplicação
+Esses itens não ajudam diretamente a explicar a diferença entre processamento sequencial e paralelo e só deverão ser considerados depois da apresentação principal estar pronta.
 
 ---
 
-## 39. Arquitetura Geral
+## 23. Roteiro curto para a apresentação
 
-                    ┌──────────────────────────┐
-                    │      MAIN THREAD         │
-                    │                          │
-                    │ Raylib                   │
-                    │ Input                    │
-                    │ Renderização             │
-                    │ Interface                │
-                    │ Métricas                 │
-                    └────────────┬─────────────┘
-                                 │
-                        Estado da simulação
-                                 │
-              ┌──────────────────┴──────────────────┐
-              │                                     │
-        SINGLE-THREAD                         MULTI-THREAD
-              │                                     │
-          Worker 1                       Worker 1 → Civ A
-              │                          Worker 2 → Civ B
-              ├── Civ A                  Worker 3 → Civ C
-              ├── Civ B                  Worker 4 → Civ D
-              ├── Civ C
-              └── Civ D
+1. Explicar que a imagem sempre usa a thread principal.
+2. Selecionar 1 worker e mostrar: `2 threads do projeto = 1 principal + 1 worker`.
+3. Mostrar que esse worker atualiza as quatro civilizações em sequência.
+4. Ativar o Stress Test gradual.
+5. Observar população, tempo da simulação e FPS.
+6. Mostrar que, ao atingir 30 FPS, novos agentes deixam de surgir sem limitar o FPS e sem remover agentes.
+7. Trocar para 4 workers mantendo o mesmo mundo.
+8. Mostrar: `5 threads do projeto = 1 principal + 4 workers`.
+9. Aguardar o aquecimento e comparar o `Simulation Time`.
+10. Mostrar a recuperação do FPS e, se atingir 35 FPS de forma estável, a retomada do crescimento.
+11. Exibir a tabela do benchmark controlado.
+12. Explicar por que o ganho não é exatamente 4x e como o número de núcleos influencia o resultado.
 
----
-
-## 40. Exemplo da Tela Final
-
-    ┌─────────────────────────────────────────────────────────┐
-    │ FPS: 72 | Simulation: 8.4 ms | Population: 8.432       │
-    │ Threads: 4                                             │
-    │                                                         │
-    │ [1 Thread] [2 Threads] [4 Threads] [Stress Test]       │
-    ├────────────────────────────┬────────────────────────────┤
-    │ CIVILIZAÇÃO A              │ CIVILIZAÇÃO B              │
-    │                            │                            │
-    │ ●      ●      ●            │     ●      ●               │
-    │      ■       ●             │ ●          ■       ●       │
-    │           ▲                │          ▲                 │
-    │ ●              ●           │     ●          ●           │
-    │                            │                            │
-    ├────────────────────────────┼────────────────────────────┤
-    │ CIVILIZAÇÃO C              │ CIVILIZAÇÃO D              │
-    │                            │                            │
-    │ ●    ●       ■             │       ●       ●            │
-    │        ●                   │ ■          ●               │
-    │           ▲                │          ▲                 │
-    │ ●             ●            │    ●            ●          │
-    │                            │                            │
-    └────────────────────────────┴────────────────────────────┘
-
----
-
-## 41. Demonstração na Apresentação
-
-Uma possível sequência para a apresentação será:
-
-### Etapa 1 — Baixa população
-
-Iniciar com poucos agentes.
-
-Mostrar que:
-
-- 1 thread funciona normalmente;
-- 4 threads também funcionam normalmente;
-- praticamente não existe diferença perceptível.
-
-### Etapa 2 — Aumentar população
-
-Utilizar o crescimento natural ou o botão Stress Test.
-
-Mostrar:
-
-- aumento do Simulation Time;
-- redução do FPS;
-- maior carga de CPU.
-
-### Etapa 3 — Single-thread
-
-Utilizar apenas uma thread de simulação.
-
-Exemplo:
-
-    Population: 15.000
-    Threads: 1
-
-    Simulation Time: 30 ms
-    FPS: 25
-
-### Etapa 4 — Multi-thread
-
-Alterar para quatro threads.
-
-Exemplo:
-
-    Population: 15.000
-    Threads: 4
-
-    Simulation Time: 10 ms
-    FPS: 60
-
-### Etapa 5 — Explicação
-
-Explicar que as quatro civilizações possuem processamento independente e, portanto, podem ser distribuídas entre diferentes threads e núcleos da CPU.
-
----
-
-## 42. Comparação Experimental
-
-Os testes poderão ser registrados em uma tabela.
-
-Exemplo:
-
-| População | Threads | Simulation Time | FPS |
-|-----------|---------|-----------------|-----|
-| 1.000 | 1 | 2 ms | 144 |
-| 1.000 | 4 | 1 ms | 144 |
-| 5.000 | 1 | 12 ms | 70 |
-| 5.000 | 4 | 4 ms | 120 |
-| 10.000 | 1 | 24 ms | 38 |
-| 10.000 | 4 | 8 ms | 85 |
-| 20.000 | 1 | 45 ms | 20 |
-| 20.000 | 4 | 15 ms | 55 |
-
-Os valores serão preenchidos com resultados reais após a implementação.
-
----
-
-## 43. Resultado Esperado
-
-Ao final do projeto deverá existir uma aplicação gráfica simples capaz de:
-
-1. simular quatro civilizações;
-2. aumentar progressivamente sua população;
-3. executar lógica individual para milhares de agentes;
-4. processar as civilizações utilizando diferentes quantidades de threads;
-5. mostrar métricas de desempenho em tempo real;
-6. permitir comparar single-thread e multithread;
-7. demonstrar visualmente o benefício do paralelismo.
-
----
-
-## 44. Objetivo Final da Apresentação
-
-A demonstração deverá deixar claro que, conforme o número de agentes aumenta, o processamento necessário para atualizar a simulação cresce significativamente.
-
-Quando todas as civilizações são processadas sequencialmente por uma única thread, o tempo necessário para completar cada ciclo aumenta e o FPS diminui.
-
-Ao dividir civilizações independentes entre múltiplas threads, parte do processamento pode ocorrer simultaneamente em diferentes núcleos da CPU.
-
-Isso reduz o tempo necessário para atualizar a simulação e pode aumentar significativamente o desempenho geral da aplicação.
-
-O projeto também demonstrará que o ganho obtido com multithreading não é necessariamente proporcional à quantidade de threads, pois existem custos relacionados à sincronização, renderização, memória, escalonamento e partes sequenciais do programa.
+Esse roteiro deve permitir que a turma veja a diferença primeiro e entenda a explicação técnica logo depois.

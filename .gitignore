@@ -1,0 +1,20 @@
+# Build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Local SDK used by the development environment
+.dotnet/
+.dotnet-install.ps1
+.dotnet-home/
+.nuget/
+
+# IDE and user files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Benchmark exports
+artifacts/
