@@ -516,6 +516,7 @@ Não haverá controle de limite de FPS.
 - para as atualizações e os nascimentos;
 - mantém a janela e a interface responsivas;
 - pausa o cronômetro de execução ativa;
+- mantém visíveis as últimas métricas medidas antes da pausa;
 - reinicia a janela de medição de FPS ao continuar.
 
 ### Reinício

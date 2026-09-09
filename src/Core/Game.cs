@@ -145,13 +145,14 @@ public sealed class Game : IDisposable
             if (_paused)
             {
                 _clock.Pause();
+                _clock.ResetDeltaSample();
             }
             else
             {
                 _clock.Resume();
+                ResetMetricsAndDelta();
             }
 
-            ResetMetricsAndDelta();
             resetFrameMeasurement = true;
         }
 
