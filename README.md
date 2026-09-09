@@ -7,12 +7,13 @@ Aplicação didática em C# e Raylib-cs que compara a atualização de quatro ci
 - 1 worker de simulação + 1 thread principal/renderização = 2 threads controladas pelo projeto;
 - 4 workers de simulação + 1 thread principal/renderização = 5 threads controladas pelo projeto;
 - recursos renováveis em pontos fixos, com rotas distribuídas entre os agentes;
-- no máximo 8 agentes atribuídos à mesma rota de recurso enquanto houver alternativas;
+- no máximo 10 agentes atribuídos à mesma rota de recurso enquanto houver alternativas;
 - base com 80 pontos de depósito, evitando que todos retornem ao mesmo pixel;
+- nascimento natural de no máximo um agente por civilização a cada 0,05 segundo;
 - cronômetro de tempo real, sem relógio fictício de jogo;
 - FPS sem limite imposto pela aplicação;
-- suspensão automática de novos agentes quando o FPS médio chega a 30;
-- retomada após o FPS permanecer em pelo menos 35 durante 2 segundos;
+- suspensão automática de novos agentes quando o FPS médio chega a 10;
+- retomada após o FPS permanecer em pelo menos 15 durante 2 segundos;
 - métricas de frame, renderização, simulação, p50, p95 e updates/s.
 - métricas exibidas em colunas fixas e atualizadas a cada 0,5 segundo para facilitar a leitura;
 - identificação do worker e do ID real da thread responsável por cada civilização.
@@ -89,9 +90,10 @@ Esse modo aquece cada execução por 3 segundos, registra informações do compu
 
 ## Calibração atual
 
-Com 20.000 agentes e 768 pontos renováveis por civilização, o smoke test gráfico no computador de desenvolvimento mediu aproximadamente:
+Como referência anterior, com 20.000 agentes e 768 pontos renováveis por civilização, o smoke test gráfico no computador de desenvolvimento mediu aproximadamente:
 
 - 1 worker: 13 FPS e 73,54 ms de simulação;
 - 4 workers: 36 FPS e 27,55 ms de simulação.
 
 Esses valores são dependentes do hardware e devem ser confirmados novamente se a apresentação ocorrer em outro computador.
+O limite atual é de 28.000 agentes; a calibração nesse novo máximo deve ser executada sem outra instância da simulação disputando CPU.

@@ -13,6 +13,7 @@ public static class SelfTestRunner
             ("recursos permanecem inesgotáveis", ResourcesRemainUnchanged),
             ("agentes usam rotas e depósitos distribuídos", AgentsUseDistributedRoutes),
             ("1 e 4 workers produzem o mesmo estado", WorkerModesAreDeterministic),
+            ("parâmetros padrão da apresentação", DefaultPresentationParametersAreCorrect),
             ("bloqueio e recuperação do crescimento", GrowthControllerUsesHysteresis),
             ("crescimento natural depende das entregas", NaturalGrowthUsesDeliveries),
             ("Stress Test respeita bloqueio e limite", StressTestRespectsSafetyAndLimit),
@@ -149,7 +150,7 @@ public static class SelfTestRunner
         PopulationGrowthController controller = new(config);
 
         controller.Update(
-            averageFps: 30,
+            averageFps: 10,
             fpsWindowReady: true,
             deltaSeconds: 0.016,
             pausedByUser: false,
@@ -157,12 +158,12 @@ public static class SelfTestRunner
             populationLimitReached: false);
         Assert(
             controller.State == PopulationGrowthState.BlockedByLowFps,
-            "O crescimento não foi bloqueado em 30 FPS.");
+            "O crescimento não foi bloqueado em 10 FPS.");
 
         for (int index = 0; index < 130; index++)
         {
             controller.Update(
-                averageFps: 35,
+                averageFps: 15,
                 fpsWindowReady: true,
                 deltaSeconds: 1.0 / 60.0,
                 pausedByUser: false,
@@ -173,6 +174,29 @@ public static class SelfTestRunner
         Assert(
             controller.State == PopulationGrowthState.Enabled,
             "O crescimento não foi liberado após a recuperação esperada.");
+    }
+
+    private static void DefaultPresentationParametersAreCorrect()
+    {
+        SimulationConfig config = new();
+
+        Assert(
+            Math.Abs(config.NaturalSpawnIntervalSeconds - 0.05) < 0.000_001,
+            "O intervalo padrão de nascimento deveria ser 0,05 segundo.");
+        Assert(
+            config.MaxPopulationPerCivilization == 7_000 &&
+            config.MaxPopulationTotal == 28_000,
+            "O limite padrão deveria ser 7.000 por civilização e 28.000 no total.");
+        Assert(
+            config.ResourceNodesPerCivilization * config.MaxAgentsPerResourceRoute >=
+            config.MaxPopulationPerCivilization,
+            "As rotas configuradas não comportam a população máxima.");
+        Assert(
+            Math.Abs(config.LowFpsThreshold - 10.0) < 0.000_001,
+            "O bloqueio padrão deveria acontecer em 10 FPS.");
+        Assert(
+            Math.Abs(config.RecoveryFpsThreshold - 15.0) < 0.000_001,
+            "A recuperação padrão deveria acontecer em 15 FPS.");
     }
 
     private static void ControlledThreadCountIsCorrect()

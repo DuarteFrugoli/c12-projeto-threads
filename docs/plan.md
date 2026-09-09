@@ -38,7 +38,7 @@ Estas decisões fazem parte da especificação e não devem ficar como opções 
 - o FPS será ilimitado pela aplicação;
 - a renderização acontecerá somente na thread principal;
 - os workers de simulação serão threads persistentes, não criadas a cada frame;
-- o crescimento populacional será suspenso quando o FPS médio chegar a 30;
+- o crescimento populacional será suspenso quando o FPS médio chegar a 10;
 - os agentes existentes nunca serão removidos por causa de FPS baixo;
 - haverá um limite populacional absoluto como segunda proteção;
 - os modos principais da apresentação serão 1 worker e 4 workers;
@@ -141,12 +141,12 @@ As quatro civilizações usarão os mesmos parâmetros. Os mapas serão equivale
 - cada território recebe uma quantidade fixa de pontos no início;
 - a posição dos pontos não muda;
 - um ponto nunca é consumido, removido ou esgotado;
-- cada rota aceita no máximo oito agentes atribuídos enquanto existirem alternativas;
+- cada rota aceita no máximo dez agentes atribuídos enquanto existirem alternativas;
 - a ocupação das rotas é reconstruída a cada ciclo e pertence à civilização;
 - coletar cria uma unidade carregada pelo agente;
 - a quantidade armazenada na base aumenta quando o agente entrega a unidade.
 
-A **lista de pontos é finita**, enquanto o **estoque de cada ponto é renovável**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população. O limite de oito agentes controla a ocupação visual da rota, não o estoque do ponto.
+A **lista de pontos é finita**, enquanto o **estoque de cada ponto é renovável**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população. O limite de dez agentes controla a ocupação visual da rota, não o estoque do ponto.
 
 Como os pontos são imutáveis e pertencem a uma única civilização, a busca não precisa bloquear outros workers.
 
@@ -278,30 +278,30 @@ Existirão duas proteções independentes.
 
 Valor inicial sugerido:
 
-- máximo de 5.000 agentes por civilização;
-- máximo de 20.000 agentes no total.
+- máximo de 7.000 agentes por civilização;
+- máximo de 28.000 agentes no total.
 
 Os valores poderão ser reduzidos após os testes no computador da apresentação. Nenhum controle, inclusive o Stress Test, poderá ultrapassar esse limite.
 
-### 9.2 Bloqueio adaptativo aos 30 FPS
+### 9.2 Bloqueio adaptativo aos 10 FPS
 
 O controlador observará o FPS médio da janela móvel de 1 segundo.
 
-- se o FPS médio for **menor ou igual a 30**, todo surgimento de novos agentes será suspenso;
+- se o FPS médio for **menor ou igual a 10**, todo surgimento de novos agentes será suspenso;
 - os agentes existentes continuarão se movimentando, procurando e coletando;
 - os recursos continuarão sendo armazenados;
 - nenhum agente será removido;
 - a interface mostrará `Crescimento pausado — FPS baixo`;
 - o Stress Test e qualquer comando manual também deverão respeitar o bloqueio.
 
-Para evitar que o sistema ligue e desligue o crescimento repetidamente próximo de 30 FPS, será usada histerese:
+Para evitar que o sistema ligue e desligue o crescimento repetidamente próximo de 10 FPS, será usada histerese:
 
-- bloquear em `FPS médio <= 30`;
-- liberar somente após `FPS médio >= 35` durante 2 segundos consecutivos.
+- bloquear em `FPS médio <= 10`;
+- liberar somente após `FPS médio >= 15` durante 2 segundos consecutivos.
 
 Depois de liberar, os agentes surgirão respeitando o intervalo normal ou o intervalo do Stress Test. Não haverá criação acumulada em massa no primeiro frame.
 
-Esse mecanismo reduz o risco de crescimento descontrolado, mas não promete que o FPS nunca terá uma queda momentânea abaixo de 30, pois outras aplicações, o sistema operacional e a renderização também podem causar oscilações.
+Esse mecanismo reduz o risco de crescimento descontrolado, mas não promete que o FPS nunca terá uma queda momentânea abaixo de 10, pois outras aplicações, o sistema operacional e a renderização também podem causar oscilações.
 
 Estados possíveis do crescimento:
 
@@ -480,7 +480,7 @@ Simulação: 14.8 ms          Renderização: 8.1 ms
 Simulação p50/p95: 14.5 / 16.2 ms
 Atualizações/s: 42.7
 
-População: 8.432 / 20.000
+População: 8.432 / 28.000
 Workers de simulação: 1
 Threads do projeto: 2 (1 principal + 1 worker)
 Crescimento: ATIVO
@@ -492,8 +492,8 @@ Crescimento: ATIVO
 Quando necessário:
 
 ```text
-Crescimento: PAUSADO — FPS médio <= 30
-Será retomado após FPS >= 35 por 2 segundos.
+Crescimento: PAUSADO — FPS médio <= 10
+Será retomado após FPS >= 15 por 2 segundos.
 ```
 
 Não haverá controle de limite de FPS.
@@ -542,7 +542,7 @@ O Stress Test:
 
 - injeta agentes sem consumir o estoque de recursos, pois é uma ferramenta de demonstração;
 - respeita o limite absoluto;
-- respeita o bloqueio aos 30 FPS;
+- respeita o bloqueio aos 10 FPS;
 - para de criar agentes imediatamente quando o crescimento é bloqueado;
 - mostra visualmente que está ativo;
 - pode ser desligado pelo usuário;
@@ -562,17 +562,18 @@ Os valores abaixo são pontos de partida. Devem ficar centralizados em `Simulati
 | População inicial por civilização | 10 |
 | Pontos de recurso por civilização | 768 |
 | Estoque do ponto de recurso | Renovável/inesgotável |
-| Máximo de agentes por rota | 8 |
+| Máximo de agentes por rota | 10 |
 | Pontos de depósito por base | 80 (grade 16 × 5) |
 | Unidade carregada por viagem | 1 |
 | Custo inicial de um agente | 10 unidades |
 | Duração real da coleta | 0,25 s |
+| Intervalo do nascimento natural | 0,05 s |
 | Velocidade do agente | 80 px/s |
-| Limite por civilização | 5.000 |
-| Limite total | 20.000 |
+| Limite por civilização | 7.000 |
+| Limite total | 28.000 |
 | Janela de FPS | 1 s |
-| Bloqueio de crescimento | FPS médio <= 30 |
-| Liberação de crescimento | FPS médio >= 35 por 2 s |
+| Bloqueio de crescimento | FPS médio <= 10 |
+| Liberação de crescimento | FPS médio >= 15 por 2 s |
 | Aquecimento após trocar workers | 2 s |
 | Intervalo de atualização visual das métricas | 0,5 s |
 
@@ -637,12 +638,12 @@ Essa é a parte visual da apresentação:
 1. iniciar com 1 worker e poucos agentes;
 2. ativar crescimento normal ou Stress Test;
 3. observar o aumento do `Simulation Time` e a queda do FPS;
-4. ao chegar a 30 FPS, mostrar o bloqueio automático de novos agentes;
+4. chegar à população desejada ou, se ocorrer antes, mostrar o bloqueio automático em 10 FPS;
 5. anotar população e métricas atuais;
 6. trocar para 4 workers, preservando exatamente o mesmo estado;
 7. aguardar o período de aquecimento;
 8. observar a redução do tempo de simulação e a recuperação do FPS;
-9. quando o FPS permanecer acima de 35, mostrar a retomada automática do crescimento.
+9. caso o crescimento tenha sido bloqueado, mostrar a retomada após o FPS permanecer em pelo menos 15.
 
 Essa sequência comunica visualmente por que o paralelismo ajuda.
 
@@ -684,7 +685,7 @@ Ambiente da medição:
 - build `Release`, fora do depurador;
 - 4.000 agentes no total;
 - 768 pontos de recurso renováveis por civilização;
-- rotas distribuídas com até oito agentes atribuídos por ponto;
+- rotas distribuídas com até dez agentes atribuídos por ponto;
 - aquecimento de 3 segundos;
 - três repetições de 10 segundos por modo.
 
@@ -694,14 +695,14 @@ Ambiente da medição:
 | 4.000 | 2 | 7,475 ms | 10,449 ms | 1,97x |
 | 4.000 | 4 | 6,022 ms | 6,535 ms | 2,44x |
 
-Calibração gráfica oculta com a população máxima de 20.000 agentes:
+Calibração gráfica de referência com 20.000 agentes, coletada antes de o limite ser ampliado para 28.000:
 
 | Workers | FPS médio | Simulation Time médio | Render Time médio |
 |---:|---:|---:|---:|
 | 1 | 13,0 | 73,54 ms | 4,84 ms |
 | 4 | 36,0 | 27,55 ms | 3,75 ms |
 
-Esses valores confirmam no computador atual que a carga atravessa a região de 30 FPS com 1 worker e se recupera claramente com 4 workers. A calibração deverá ser repetida se a apresentação usar outro computador.
+Esses valores confirmam no computador atual uma diferença visual clara entre 1 e 4 workers. O limiar de 10 FPS permite que a população se aproxime mais do máximo antes do bloqueio. A calibração com 28.000 agentes deverá ser repetida sem outra instância da simulação disputando CPU e também se a apresentação usar outro computador.
 
 ---
 
@@ -734,8 +735,8 @@ Esses valores confirmam no computador atual que a carga atravessa a região de 3
 - [x] implementar intervalo real entre nascimentos;
 - [x] implementar limite por civilização e limite total;
 - [x] calcular FPS médio em janela de 1 segundo;
-- [x] bloquear crescimento em 30 FPS;
-- [x] liberar em 35 FPS após 2 segundos;
+- [x] bloquear crescimento em 10 FPS;
+- [x] liberar em 15 FPS após 2 segundos;
 - [x] implementar Stress Test gradual e seguro.
 
 ### Etapa 4 — Multithreading
@@ -783,7 +784,7 @@ O projeto estará pronto quando todos os itens abaixo forem verdadeiros:
 - [x] o cronômetro corresponde ao tempo real de execução ativa;
 - [x] pausa e continuação não causam saltos de tempo;
 - [x] o FPS não é limitado pela aplicação;
-- [x] crescimento para quando o FPS médio chega a 30;
+- [x] crescimento para quando o FPS médio chega a 10;
 - [x] crescimento só volta nas condições de recuperação definidas;
 - [x] nenhuma forma de nascimento ignora o limite absoluto;
 - [x] Stress Test não cria uma quantidade enorme em um único frame.
@@ -852,7 +853,7 @@ Resposta:
 - no benchmark, usar a mesma população em todas;
 - registrar o tempo individual de cada worker apenas como diagnóstico.
 
-### Queda abrupta abaixo de 30 FPS
+### Queda abrupta abaixo de 10 FPS
 
 Resposta:
 
@@ -875,7 +876,7 @@ Resposta:
 - pathfinding avançado;
 - interação entre civilizações;
 - multiplayer;
-- recursos escassos ou regeneráveis;
+- recursos esgotáveis;
 - relógio de dias, anos ou eras;
 - limite configurável de FPS;
 - troca da lógica por algoritmos diferentes conforme o modo de workers.
@@ -891,11 +892,11 @@ Esses itens não ajudam diretamente a explicar a diferença entre processamento 
 3. Mostrar que esse worker atualiza as quatro civilizações em sequência.
 4. Ativar o Stress Test gradual.
 5. Observar população, tempo da simulação e FPS.
-6. Mostrar que, ao atingir 30 FPS, novos agentes deixam de surgir sem limitar o FPS e sem remover agentes.
+6. Aguardar a população desejada; se atingir 10 FPS antes disso, mostrar que novos agentes deixam de surgir sem limitar o FPS e sem remover agentes.
 7. Trocar para 4 workers mantendo o mesmo mundo.
 8. Mostrar: `5 threads do projeto = 1 principal + 4 workers`.
 9. Aguardar o aquecimento e comparar o `Simulation Time`.
-10. Mostrar a recuperação do FPS e, se atingir 35 FPS de forma estável, a retomada do crescimento.
+10. Mostrar a recuperação do FPS e, se o crescimento estava bloqueado, a retomada ao atingir 15 FPS de forma estável.
 11. Exibir a tabela do benchmark controlado.
 12. Explicar por que o ganho não é exatamente 4x e como o número de núcleos influencia o resultado.
 

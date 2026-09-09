@@ -63,7 +63,7 @@ Executar os testes internos:
 O resultado esperado é:
 
 ```text
-9/9 testes passaram.
+10/10 testes passaram.
 ```
 
 Sequência recomendada para preparar tudo:
@@ -118,11 +118,11 @@ O .NET e o sistema operacional podem criar outras threads internas. A apresenta�
 2. Pressionar `1` para selecionar um worker.
 3. Pressionar `S` para ativar o Stress Test.
 4. Observar a população aumentar, o tempo da simulação subir e o FPS cair.
-5. Quando o FPS médio chegar a 30, mostrar que novos agentes deixam de surgir.
+5. Aguardar a população desejada; se o FPS médio chegar a 10 antes disso, mostrar o bloqueio de proteção.
 6. Pressionar `4`, mantendo a mesma população e o mesmo mundo.
 7. Aguardar o aviso `Aquecendo métricas` desaparecer.
 8. Comparar o `Simulation Time` e o FPS.
-9. Mostrar que o crescimento volta quando o FPS permanece em pelo menos 35 por dois segundos.
+9. Se o crescimento tiver sido bloqueado, mostrar que ele volta quando o FPS permanece em pelo menos 15 por dois segundos.
 10. Pressionar `Esc` para fechar.
 
 ---
@@ -202,13 +202,13 @@ Formato:
 Calibração com a população máxima e um worker:
 
 ```powershell
-& .\.dotnet\dotnet.exe run -c Release --no-build -- --smoke-test 5000 1
+& .\.dotnet\dotnet.exe run -c Release --no-build -- --smoke-test 7000 1
 ```
 
 Comparação com quatro workers:
 
 ```powershell
-& .\.dotnet\dotnet.exe run -c Release --no-build -- --smoke-test 5000 4
+& .\.dotnet\dotnet.exe run -c Release --no-build -- --smoke-test 7000 4
 ```
 
 As capturas são salvas na pasta:

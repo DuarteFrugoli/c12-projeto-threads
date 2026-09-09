@@ -31,7 +31,7 @@ public static class Program
 
             if (args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
             {
-                int populationPerCivilization = ParseBoundedIntegerArgument(args, 1, 10, 5_000);
+                int populationPerCivilization = ParseBoundedIntegerArgument(args, 1, 10, 7_000);
                 int workerCount = ParseWorkerCountArgument(args, 2);
                 SimulationConfig smokeConfig = new()
                 {

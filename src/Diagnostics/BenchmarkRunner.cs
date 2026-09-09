@@ -270,7 +270,7 @@ public static class BenchmarkRunner
     {
         return new SimulationConfig
         {
-            InitialPopulationPerCivilization = Math.Min(requestedPopulation, 5_000),
+            InitialPopulationPerCivilization = Math.Min(requestedPopulation, 7_000),
         };
     }
 

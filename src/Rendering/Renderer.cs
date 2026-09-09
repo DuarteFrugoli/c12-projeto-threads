@@ -110,7 +110,10 @@ public sealed class Renderer
             17,
             Text);
 
-        string growthText = GetGrowthText(growthController.State, stressMode);
+        string growthText = GetGrowthText(
+            growthController.State,
+            stressMode,
+            config.LowFpsThreshold);
         Color growthColor = growthController.State == PopulationGrowthState.Enabled ? Good : Warning;
         Raylib.DrawText($"Crescimento: {growthText}", 20, 99, 18, growthColor);
 
@@ -304,12 +307,16 @@ public sealed class Renderer
         Raylib.DrawText(label, textX, textY, 17, Text);
     }
 
-    private static string GetGrowthText(PopulationGrowthState state, bool stressMode)
+    private static string GetGrowthText(
+        PopulationGrowthState state,
+        bool stressMode,
+        double lowFpsThreshold)
     {
         return state switch
         {
             PopulationGrowthState.Enabled => stressMode ? "ATIVO — STRESS" : "ATIVO",
-            PopulationGrowthState.BlockedByLowFps => "PAUSADO — FPS <= 30",
+            PopulationGrowthState.BlockedByLowFps =>
+                $"PAUSADO — FPS <= {lowFpsThreshold:F0}",
             PopulationGrowthState.BlockedByPopulationLimit => "LIMITE POPULACIONAL",
             PopulationGrowthState.PausedByUser => "PAUSADO PELO USUÁRIO",
             PopulationGrowthState.DisabledForBenchmark => "DESATIVADO NO BENCHMARK",
