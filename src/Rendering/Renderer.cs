@@ -15,43 +15,58 @@ public sealed class Renderer
     private static readonly Color Panel = new(27, 32, 43, 255);
     private static readonly Color Text = new(232, 235, 242, 255);
     private static readonly Color MutedText = new(164, 172, 190, 255);
-    private static readonly Color ResourceColor = new(238, 238, 244, 255);
+    private static readonly Color ResourceColor = new(118, 126, 143, 255);
+    private static readonly Color CarriedResourceColor = new(250, 250, 252, 255);
     private static readonly Color BaseColor = new(250, 250, 252, 255);
     private static readonly Color ActiveButton = new(52, 117, 214, 255);
     private static readonly Color InactiveButton = new(54, 61, 77, 255);
     private static readonly Color Warning = new(255, 116, 92, 255);
     private static readonly Color Good = new(83, 210, 132, 255);
+    private DisplayMetrics _displayMetrics;
+    private double _nextMetricsRefreshAtSeconds;
+    private double _lastElapsedSeconds = -1;
+    private bool _displayMetricsReady;
 
     public void Draw(
         SimulationState state,
         SimulationConfig config,
         PerformanceMetrics metrics,
         PopulationGrowthController growthController,
-        int workerCount,
-        int controlledThreadCount,
+        SimulationCoordinator coordinator,
         double elapsedSeconds,
         bool paused,
-        bool stressMode)
+        bool stressMode,
+        bool fullscreen)
     {
+        UpdateDisplayMetrics(metrics, config, elapsedSeconds);
         Raylib.ClearBackground(Background);
+        Camera2D camera = UiLayout.CreateVirtualCamera(config);
+        Raylib.BeginMode2D(camera);
         DrawHeader(
             state,
             config,
             metrics,
             growthController,
-            workerCount,
-            controlledThreadCount,
+            coordinator.WorkerCount,
+            coordinator.ThreadsControlledByProject,
             elapsedSeconds,
             paused,
-            stressMode);
+            stressMode,
+            fullscreen);
 
         foreach (Civilization civilization in state.Civilizations)
         {
-            DrawCivilization(civilization, config);
+            DrawCivilization(
+                civilization,
+                config,
+                coordinator.GetWorkerNumberForCivilization(civilization.Id),
+                coordinator.GetManagedThreadIdForCivilization(civilization.Id));
         }
+
+        Raylib.EndMode2D();
     }
 
-    private static void DrawHeader(
+    private void DrawHeader(
         SimulationState state,
         SimulationConfig config,
         PerformanceMetrics metrics,
@@ -60,26 +75,19 @@ public sealed class Renderer
         int controlledThreadCount,
         double elapsedSeconds,
         bool paused,
-        bool stressMode)
+        bool stressMode,
+        bool fullscreen)
     {
         Raylib.DrawRectangle(0, 0, config.WindowWidth, config.HeaderHeight, Panel);
         Raylib.DrawText("SIMULAÇÃO DE CIVILIZAÇÕES | MULTITHREADING", 20, 12, 23, Text);
 
         string elapsed = TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss\.fff", DisplayCulture);
         Raylib.DrawText($"Tempo real: {elapsed}", 20, 43, 18, Text);
-        Raylib.DrawText(
-            $"FPS: {metrics.AverageFps:F1} (ilimitado)   Frame: {metrics.AverageFrameMilliseconds:F2} ms",
-            245,
-            43,
-            18,
-            Text);
-        Raylib.DrawText(
-            $"Simulação: {metrics.LastSimulationMilliseconds:F2} ms   " +
-            $"p50/p95: {metrics.SimulationP50Milliseconds:F2}/{metrics.SimulationP95Milliseconds:F2} ms",
-            650,
-            43,
-            18,
-            Text);
+        DrawMetric("FPS", FormatMetric(_displayMetrics.Fps, "F1"), 230, 43);
+        DrawMetric("Frame", FormatMetric(_displayMetrics.FrameMilliseconds, "F2", " ms"), 350, 43);
+        DrawMetric("Sim.", FormatMetric(_displayMetrics.SimulationMilliseconds, "F2", " ms"), 555, 43);
+        DrawMetric("Render", FormatMetric(_displayMetrics.RenderMilliseconds, "F2", " ms"), 790, 43);
+        DrawMetric("Updates/s", FormatMetric(_displayMetrics.UpdatesPerSecond, "F1"), 1_000, 43);
 
         Raylib.DrawText(
             $"População: {state.TotalPopulation:N0}/{config.MaxPopulationTotal:N0}",
@@ -95,7 +103,8 @@ public sealed class Renderer
             17,
             Text);
         Raylib.DrawText(
-            $"Render: {metrics.LastRenderMilliseconds:F2} ms   Updates/s: {metrics.UpdatesPerSecond:F1}",
+            $"p50/p95: {FormatMetric(_displayMetrics.SimulationP50Milliseconds, "F2")}/" +
+            $"{FormatMetric(_displayMetrics.SimulationP95Milliseconds, "F2")} ms",
             825,
             72,
             17,
@@ -131,11 +140,19 @@ public sealed class Renderer
         DrawButton(UiLayout.PauseButton, paused ? "Continuar" : "Pausar", paused);
         DrawButton(UiLayout.RestartButton, "Reiniciar", false);
         DrawButton(UiLayout.StressButton, stressMode ? "Stress: ON" : "Stress Test", stressMode);
+        DrawButton(
+            UiLayout.FullscreenButton,
+            fullscreen ? "Modo janela" : "Tela cheia",
+            fullscreen);
 
-        Raylib.DrawText("Atalhos: 1/2/4, Espaço, R, S", 770, 133, 17, MutedText);
+        Raylib.DrawText("Atalhos: 1/2/4, Espaço, R, S, F11", 895, 133, 16, MutedText);
     }
 
-    private static void DrawCivilization(Civilization civilization, SimulationConfig config)
+    private static void DrawCivilization(
+        Civilization civilization,
+        SimulationConfig config,
+        int workerNumber,
+        int managedThreadId)
     {
         RgbColor theme = civilization.Color;
         Color fill = new(
@@ -154,7 +171,8 @@ public sealed class Renderer
             fill);
         Raylib.DrawRectangleLinesEx(ToRaylibRectangle(territory), 2f, accent);
         Raylib.DrawText(
-            $"Civilização {civilization.Name}  |  Pop: {civilization.Agents.Count:N0}  |  " +
+            $"Civilização {civilization.Name}  |  Worker {workerNumber} (Thread ID {managedThreadId})  |  " +
+            $"Pop: {civilization.Agents.Count:N0}  |  " +
             $"Recursos: {civilization.StoredResources:N0}",
             (int)territory.X + 12,
             (int)territory.Y + 9,
@@ -164,23 +182,32 @@ public sealed class Renderer
         foreach (ResourceNode resource in civilization.ResourceNodes)
         {
             Raylib.DrawRectangle(
-                (int)resource.Position.X - 2,
-                (int)resource.Position.Y - 2,
-                5,
-                5,
+                (int)resource.Position.X - 1,
+                (int)resource.Position.Y - 1,
+                2,
+                2,
                 ResourceColor);
         }
 
         Vector2 basePosition = civilization.BasePosition;
+        Rectangle baseArea = new(
+            basePosition.X - (config.BaseDropOffWidth / 2f),
+            basePosition.Y - (config.BaseDropOffHeight / 2f),
+            config.BaseDropOffWidth,
+            config.BaseDropOffHeight);
+        Color baseAreaFill = new(theme.R, theme.G, theme.B, (byte)55);
+        Raylib.DrawRectangleRec(baseArea, baseAreaFill);
+        Raylib.DrawRectangleLinesEx(baseArea, 1f, accent);
         Raylib.DrawTriangle(
-            new Vector2(basePosition.X, basePosition.Y - 12),
-            new Vector2(basePosition.X - 12, basePosition.Y + 10),
-            new Vector2(basePosition.X + 12, basePosition.Y + 10),
+            new Vector2(basePosition.X, basePosition.Y - 9),
+            new Vector2(basePosition.X - 9, basePosition.Y + 7),
+            new Vector2(basePosition.X + 9, basePosition.Y + 7),
             BaseColor);
+
+        int diameter = GetAgentDiameter(civilization.Agents.Count, config.AgentRadius);
 
         foreach (Agent agent in civilization.Agents)
         {
-            int diameter = (int)MathF.Ceiling(config.AgentRadius * 2f);
             Raylib.DrawRectangle(
                 (int)agent.Position.X - (diameter / 2),
                 (int)agent.Position.Y - (diameter / 2),
@@ -190,9 +217,80 @@ public sealed class Renderer
 
             if (agent.IsCarryingResource)
             {
-                Raylib.DrawPixel((int)agent.Position.X, (int)agent.Position.Y, ResourceColor);
+                Raylib.DrawPixel(
+                    (int)agent.Position.X,
+                    (int)agent.Position.Y,
+                    CarriedResourceColor);
             }
         }
+    }
+
+    private static int GetAgentDiameter(int population, float configuredRadius)
+    {
+        if (population >= 3_000)
+        {
+            return 2;
+        }
+
+        if (population >= 1_000)
+        {
+            return 3;
+        }
+
+        if (population >= 250)
+        {
+            return 4;
+        }
+
+        return Math.Max(2, (int)MathF.Ceiling(configuredRadius * 2f));
+    }
+
+    private void UpdateDisplayMetrics(
+        PerformanceMetrics metrics,
+        SimulationConfig config,
+        double elapsedSeconds)
+    {
+        if (!metrics.IsFpsWindowReady)
+        {
+            _displayMetricsReady = false;
+            _nextMetricsRefreshAtSeconds = elapsedSeconds;
+            _lastElapsedSeconds = elapsedSeconds;
+            return;
+        }
+
+        bool clockWasReset = elapsedSeconds < _lastElapsedSeconds;
+
+        if (!_displayMetricsReady ||
+            clockWasReset ||
+            elapsedSeconds >= _nextMetricsRefreshAtSeconds)
+        {
+            _displayMetrics = new DisplayMetrics(
+                metrics.AverageFps,
+                metrics.AverageFrameMilliseconds,
+                metrics.AverageSimulationMilliseconds,
+                metrics.AverageRenderMilliseconds,
+                metrics.UpdatesPerSecond,
+                metrics.SimulationP50Milliseconds,
+                metrics.SimulationP95Milliseconds);
+            _displayMetricsReady = true;
+            _nextMetricsRefreshAtSeconds =
+                elapsedSeconds + config.MetricsDisplayRefreshSeconds;
+        }
+
+        _lastElapsedSeconds = elapsedSeconds;
+    }
+
+    private string FormatMetric(double value, string format, string suffix = "")
+    {
+        return _displayMetricsReady
+            ? value.ToString(format, DisplayCulture) + suffix
+            : "--";
+    }
+
+    private static void DrawMetric(string label, string value, int x, int y)
+    {
+        Raylib.DrawText($"{label}:", x, y, 16, MutedText);
+        Raylib.DrawText(value, x + Raylib.MeasureText($"{label}: ", 16), y, 18, Text);
     }
 
     private static void DrawButton(FloatRectangle rectangle, string label, bool active)
@@ -228,4 +326,13 @@ public sealed class Renderer
     {
         return new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
     }
+
+    private readonly record struct DisplayMetrics(
+        double Fps,
+        double FrameMilliseconds,
+        double SimulationMilliseconds,
+        double RenderMilliseconds,
+        double UpdatesPerSecond,
+        double SimulationP50Milliseconds,
+        double SimulationP95Milliseconds);
 }

@@ -50,7 +50,7 @@ public sealed class Game : IDisposable
         while ((frameLimit is null || renderedFrames < frameLimit) && !Raylib.WindowShouldClose())
         {
             long frameStartedAt = Stopwatch.GetTimestamp();
-            UiCommand uiCommand = UserInterface.ReadCommand();
+            UiCommand uiCommand = UserInterface.ReadCommand(_config);
             bool resetFrameMeasurement = ApplyUiCommand(uiCommand);
 
             if (resetFrameMeasurement)
@@ -90,11 +90,11 @@ public sealed class Game : IDisposable
                 _config,
                 _metrics,
                 _growthController,
-                _coordinator.WorkerCount,
-                _coordinator.ThreadsControlledByProject,
+                _coordinator,
                 _clock.ElapsedSeconds,
                 _paused,
-                _stressMode);
+                _stressMode,
+                Raylib.IsWindowFullscreen());
             Raylib.EndDrawing();
 
             double renderMilliseconds = HighResolutionTime.ElapsedMilliseconds(renderStartedAt);
@@ -171,6 +171,13 @@ public sealed class Game : IDisposable
         if (command.ToggleStressMode)
         {
             _stressMode = !_stressMode;
+        }
+
+        if (command.ToggleFullscreenMode)
+        {
+            Raylib.ToggleFullscreen();
+            ResetMetricsAndDelta();
+            resetFrameMeasurement = true;
         }
 
         return resetFrameMeasurement;

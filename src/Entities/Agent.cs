@@ -5,16 +5,26 @@ namespace C12ProjetoCiv.Entities;
 
 public sealed class Agent
 {
-    public Agent(int civilizationId, Vector2 position)
+    public Agent(
+        int id,
+        int civilizationId,
+        Vector2 position,
+        Vector2 depositPosition)
     {
+        Id = id;
         CivilizationId = civilizationId;
         Position = position;
+        DepositPosition = depositPosition;
     }
 
+    public int Id { get; }
     public int CivilizationId { get; }
     public Vector2 Position { get; private set; }
+    public Vector2 DepositPosition { get; }
     public AgentState State { get; set; } = AgentState.Searching;
     public int TargetResourceIndex { get; set; } = -1;
+    public int NextResourceIndex { get; set; } = -1;
+    public int CompletedTrips { get; private set; }
     public bool IsCarryingResource { get; private set; }
     public double CollectionStartedAtSeconds { get; private set; }
 
@@ -23,7 +33,7 @@ public sealed class Agent
     /// </summary>
     public bool Update(
         Vector2 resourcePosition,
-        Vector2 basePosition,
+        Vector2 depositPosition,
         double deltaSeconds,
         double elapsedSeconds,
         SimulationConfig config)
@@ -47,14 +57,13 @@ public sealed class Agent
                 if (elapsedSeconds - CollectionStartedAtSeconds >= config.CollectionDurationSeconds)
                 {
                     IsCarryingResource = true;
-                    TargetResourceIndex = -1;
                     State = AgentState.ReturningToBase;
                 }
 
                 break;
 
             case AgentState.ReturningToBase:
-                if (MoveTowards(basePosition, deltaSeconds, config))
+                if (MoveTowards(depositPosition, deltaSeconds, config))
                 {
                     State = AgentState.Depositing;
                 }
@@ -63,6 +72,7 @@ public sealed class Agent
 
             case AgentState.Depositing:
                 IsCarryingResource = false;
+                CompletedTrips++;
                 State = AgentState.Searching;
                 return true;
 

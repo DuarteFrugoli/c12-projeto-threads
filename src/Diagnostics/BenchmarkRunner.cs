@@ -204,7 +204,7 @@ public static class BenchmarkRunner
             $"População: {config.InitialPopulationPerCivilization:N0} por civilização " +
             $"({config.InitialPopulationPerCivilization * config.CivilizationCount:N0} total)");
         Console.WriteLine(
-            $"Recursos inesgotáveis: {config.ResourceNodesPerCivilization:N0} pontos por civilização");
+            $"Recursos renováveis: {config.ResourceNodesPerCivilization:N0} pontos por civilização");
     }
 
     private static void PrintResults(IReadOnlyList<BenchmarkResult> results)

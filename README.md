@@ -6,12 +6,16 @@ Aplicação didática em C# e Raylib-cs que compara a atualização de quatro ci
 
 - 1 worker de simulação + 1 thread principal/renderização = 2 threads controladas pelo projeto;
 - 4 workers de simulação + 1 thread principal/renderização = 5 threads controladas pelo projeto;
-- recursos com pontos fixos e capacidade inesgotável;
+- recursos renováveis em pontos fixos, com rotas distribuídas entre os agentes;
+- no máximo 8 agentes atribuídos à mesma rota de recurso enquanto houver alternativas;
+- base com 80 pontos de depósito, evitando que todos retornem ao mesmo pixel;
 - cronômetro de tempo real, sem relógio fictício de jogo;
 - FPS sem limite imposto pela aplicação;
 - suspensão automática de novos agentes quando o FPS médio chega a 30;
 - retomada após o FPS permanecer em pelo menos 35 durante 2 segundos;
 - métricas de frame, renderização, simulação, p50, p95 e updates/s.
+- métricas exibidas em colunas fixas e atualizadas a cada 0,5 segundo para facilitar a leitura;
+- identificação do worker e do ID real da thread responsável por cada civilização.
 
 O plano completo está em [`docs/plan.md`](docs/plan.md).
 
@@ -48,6 +52,7 @@ Com o SDK local deste diretório:
 | Pausar/continuar | `Espaço` | `Pausar` |
 | Reiniciar | `R` | `Reiniciar` |
 | Ativar/desativar Stress Test | `S` | `Stress Test` |
+| Alternar tela cheia | `F11` | `Tela cheia` / `Modo janela` |
 
 O Stress Test adiciona agentes gradualmente. Ele respeita tanto o limite populacional absoluto quanto o bloqueio de crescimento por FPS baixo.
 Por ser uma ferramenta de demonstração, seus agentes não consomem o estoque de recursos; o crescimento natural continua dependendo das entregas.
@@ -84,9 +89,9 @@ Esse modo aquece cada execução por 3 segundos, registra informações do compu
 
 ## Calibração atual
 
-Com 20.000 agentes e 768 pontos inesgotáveis por civilização, o smoke test gráfico no computador de desenvolvimento mediu aproximadamente:
+Com 20.000 agentes e 768 pontos renováveis por civilização, o smoke test gráfico no computador de desenvolvimento mediu aproximadamente:
 
-- 1 worker: 25 FPS e 37,30 ms de simulação;
-- 4 workers: 66 FPS e 11,66 ms de simulação.
+- 1 worker: 13 FPS e 73,54 ms de simulação;
+- 4 workers: 36 FPS e 27,55 ms de simulação.
 
 Esses valores são dependentes do hardware e devem ser confirmados novamente se a apresentação ocorrer em outro computador.

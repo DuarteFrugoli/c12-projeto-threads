@@ -15,9 +15,17 @@ public sealed record SimulationConfig
 
     public int AgentCost { get; init; } = 10;
     public int ResourceUnitsPerDelivery { get; init; } = 1;
+    public int MaxAgentsPerResourceRoute { get; init; } = 8;
+    public float ResourceOccupancyWeight { get; init; } = 2f;
+    public float ResourceDistanceWeight { get; init; } = 0.35f;
+    public float ResourcePreferenceWeight { get; init; } = 1f;
     public float AgentSpeedPixelsPerSecond { get; init; } = 80f;
     public float AgentRadius { get; init; } = 3f;
     public float ArrivalDistance { get; init; } = 2f;
+    public int BaseDropOffColumns { get; init; } = 16;
+    public int BaseDropOffRows { get; init; } = 5;
+    public float BaseDropOffWidth { get; init; } = 104f;
+    public float BaseDropOffHeight { get; init; } = 36f;
     public double CollectionDurationSeconds { get; init; } = 0.25;
     public double NaturalSpawnIntervalSeconds { get; init; } = 0.25;
     public double StressSpawnIntervalSeconds { get; init; } = 0.05;
@@ -28,6 +36,7 @@ public sealed record SimulationConfig
     public double RecoveryFpsThreshold { get; init; } = 35.0;
     public double RecoveryDurationSeconds { get; init; } = 2.0;
     public double WorkerChangeWarmupSeconds { get; init; } = 2.0;
+    public double MetricsDisplayRefreshSeconds { get; init; } = 0.5;
     public int MetricHistoryCapacity { get; init; } = 600;
 
     public int MaxPopulationTotal => CivilizationCount * MaxPopulationPerCivilization;
@@ -55,12 +64,28 @@ public sealed record SimulationConfig
             throw new InvalidOperationException("Cada civilização precisa ter ao menos um ponto de recurso.");
         }
 
+        if (MaxAgentsPerResourceRoute <= 0 ||
+            ResourceOccupancyWeight <= 0 ||
+            ResourceDistanceWeight < 0 ||
+            ResourcePreferenceWeight < 0)
+        {
+            throw new InvalidOperationException("A configuração de distribuição dos recursos é inválida.");
+        }
+
+        if (BaseDropOffColumns <= 0 || BaseDropOffRows <= 0 ||
+            BaseDropOffWidth <= 0 || BaseDropOffHeight <= 0)
+        {
+            throw new InvalidOperationException("A área de depósito da base é inválida.");
+        }
+
         if (LowFpsThreshold <= 0 || RecoveryFpsThreshold <= LowFpsThreshold)
         {
             throw new InvalidOperationException("Os limites de FPS precisam possuir histerese válida.");
         }
 
-        if (MetricHistoryCapacity <= 0 || FpsWindowSeconds <= 0)
+        if (MetricHistoryCapacity <= 0 ||
+            FpsWindowSeconds <= 0 ||
+            MetricsDisplayRefreshSeconds <= 0)
         {
             throw new InvalidOperationException("A configuração das métricas é inválida.");
         }

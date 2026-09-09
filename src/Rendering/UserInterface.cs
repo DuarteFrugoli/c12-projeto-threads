@@ -6,12 +6,13 @@ namespace C12ProjetoCiv.Rendering;
 
 public static class UserInterface
 {
-    public static UiCommand ReadCommand()
+    public static UiCommand ReadCommand(SimulationConfig config)
     {
         int? requestedWorkerCount = null;
         bool togglePause = Raylib.IsKeyPressed(KeyboardKey.Space);
         bool restart = Raylib.IsKeyPressed(KeyboardKey.R);
         bool toggleStress = Raylib.IsKeyPressed(KeyboardKey.S);
+        bool toggleFullscreen = Raylib.IsKeyPressed(KeyboardKey.F11);
 
         if (Raylib.IsKeyPressed(KeyboardKey.One))
         {
@@ -28,7 +29,7 @@ public static class UserInterface
 
         if (Raylib.IsMouseButtonPressed(MouseButton.Left))
         {
-            Vector2 mouse = Raylib.GetMousePosition();
+            Vector2 mouse = UiLayout.ScreenToVirtual(Raylib.GetMousePosition(), config);
 
             if (Contains(UiLayout.OneWorkerButton, mouse))
             {
@@ -54,9 +55,18 @@ public static class UserInterface
             {
                 toggleStress = true;
             }
+            else if (Contains(UiLayout.FullscreenButton, mouse))
+            {
+                toggleFullscreen = true;
+            }
         }
 
-        return new UiCommand(requestedWorkerCount, togglePause, restart, toggleStress);
+        return new UiCommand(
+            requestedWorkerCount,
+            togglePause,
+            restart,
+            toggleStress,
+            toggleFullscreen);
     }
 
     private static bool Contains(FloatRectangle rectangle, Vector2 point)

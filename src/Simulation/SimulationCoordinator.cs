@@ -49,6 +49,25 @@ public sealed class SimulationCoordinator : IDisposable
     public int WorkerCount { get; }
     public int ThreadsControlledByProject { get; }
 
+    public int GetWorkerNumberForCivilization(int civilizationId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(civilizationId);
+
+        if (civilizationId >= _state.Civilizations.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(civilizationId));
+        }
+
+        int civilizationsPerWorker = _state.Civilizations.Length / WorkerCount;
+        return (civilizationId / civilizationsPerWorker) + 1;
+    }
+
+    public int GetManagedThreadIdForCivilization(int civilizationId)
+    {
+        int workerIndex = GetWorkerNumberForCivilization(civilizationId) - 1;
+        return _threads[workerIndex].ManagedThreadId;
+    }
+
     public void ExecuteFrame(SimulationFrameCommand command)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

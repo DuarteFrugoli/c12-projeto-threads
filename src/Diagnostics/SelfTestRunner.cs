@@ -11,6 +11,7 @@ public static class SelfTestRunner
         List<(string Name, Action Test)> tests =
         [
             ("recursos permanecem inesgotáveis", ResourcesRemainUnchanged),
+            ("agentes usam rotas e depósitos distribuídos", AgentsUseDistributedRoutes),
             ("1 e 4 workers produzem o mesmo estado", WorkerModesAreDeterministic),
             ("bloqueio e recuperação do crescimento", GrowthControllerUsesHysteresis),
             ("crescimento natural depende das entregas", NaturalGrowthUsesDeliveries),
@@ -91,10 +92,54 @@ public static class SelfTestRunner
                 Agent actualAgent = actual.Agents[agentIndex];
                 Assert(expectedAgent.State == actualAgent.State, "Estados de agentes divergiram.");
                 Assert(
+                    expectedAgent.TargetResourceIndex == actualAgent.TargetResourceIndex,
+                    "Destinos de agentes divergiram.");
+                Assert(
+                    expectedAgent.DepositPosition == actualAgent.DepositPosition,
+                    "Pontos de depósito de agentes divergiram.");
+                Assert(
                     Math.Abs(expectedAgent.Position.X - actualAgent.Position.X) < 0.0001f &&
                     Math.Abs(expectedAgent.Position.Y - actualAgent.Position.Y) < 0.0001f,
                     "Posições de agentes divergiram.");
             }
+        }
+    }
+
+    private static void AgentsUseDistributedRoutes()
+    {
+        SimulationConfig config = new()
+        {
+            InitialPopulationPerCivilization = 200,
+            ResourceNodesPerCivilization = 64,
+            MaxPopulationPerCivilization = 500,
+        };
+        SimulationState state = SimulationState.Create(config);
+
+        RunFrames(state, config, WorkerMode.Four, frameCount: 1);
+
+        foreach (Civilization civilization in state.Civilizations)
+        {
+            int distinctResources = civilization.Agents
+                .Select(agent => agent.TargetResourceIndex)
+                .Distinct()
+                .Count();
+            int busiestRoute = civilization.Agents
+                .GroupBy(agent => agent.TargetResourceIndex)
+                .Max(group => group.Count());
+            int distinctDeposits = civilization.Agents
+                .Select(agent => agent.DepositPosition)
+                .Distinct()
+                .Count();
+
+            Assert(
+                distinctResources == config.ResourceNodesPerCivilization,
+                "Os agentes não foram distribuídos entre todos os recursos disponíveis.");
+            Assert(
+                busiestRoute <= config.MaxAgentsPerResourceRoute,
+                "Uma rota recebeu mais agentes do que sua capacidade configurada.");
+            Assert(
+                distinctDeposits == config.BaseDropOffColumns * config.BaseDropOffRows,
+                "A área da base não utilizou todos os pontos de depósito.");
         }
     }
 
@@ -138,10 +183,24 @@ public static class SelfTestRunner
         using (SimulationCoordinator one = new(state, config, WorkerMode.One))
         {
             Assert(one.ThreadsControlledByProject == 2, "O modo 1 deveria informar 2 threads.");
+            Assert(
+                state.Civilizations.All(civilization =>
+                    one.GetWorkerNumberForCivilization(civilization.Id) == 1),
+                "O worker único deveria controlar todas as civilizações.");
         }
 
         using SimulationCoordinator four = new(state, config, WorkerMode.Four);
         Assert(four.ThreadsControlledByProject == 5, "O modo 4 deveria informar 5 threads.");
+        Assert(
+            state.Civilizations.All(civilization =>
+                four.GetWorkerNumberForCivilization(civilization.Id) == civilization.Id + 1),
+            "O modo 4 deveria atribuir uma civilização a cada worker.");
+        Assert(
+            state.Civilizations
+                .Select(civilization => four.GetManagedThreadIdForCivilization(civilization.Id))
+                .Distinct()
+                .Count() == 4,
+            "Cada worker deveria possuir uma thread gerenciada distinta.");
     }
 
     private static void NaturalGrowthUsesDeliveries()

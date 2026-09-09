@@ -63,7 +63,7 @@ Executar os testes internos:
 O resultado esperado é:
 
 ```text
-8/8 testes passaram.
+9/9 testes passaram.
 ```
 
 Sequência recomendada para preparar tudo:
@@ -92,6 +92,7 @@ Depois disso, abrir a aplicação:
 | `S` | Ativar ou desativar o Stress Test |
 | `Espaço` | Pausar ou continuar |
 | `R` | Reiniciar a simulação |
+| `F11` | Alternar entre tela cheia e modo janela |
 | `Esc` | Fechar a aplicação |
 
 Os mesmos controles aparecem como botões na parte superior da janela.

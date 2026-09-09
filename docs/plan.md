@@ -31,6 +31,8 @@ Estas decisões fazem parte da especificação e não devem ficar como opções 
 - cada civilização possui seu próprio território, agentes, base e recursos;
 - os pontos de recurso são fixos e inesgotáveis;
 - a quantidade de pontos de recurso é finita e não cresce durante a execução;
+- as rotas serão distribuídas deterministicamente para evitar aglomeração;
+- cada base será uma área com vários pontos de depósito, não um único pixel;
 - o tempo será medido com um cronômetro de tempo real;
 - não haverá relógio fictício, escala de tempo ou “tempo do jogo”;
 - o FPS será ilimitado pela aplicação;
@@ -132,19 +134,19 @@ Cada civilização terá:
 
 As quatro civilizações usarão os mesmos parâmetros. Os mapas serão equivalentes em coordenadas relativas para que nenhuma civilização receba uma carga de trabalho intencionalmente maior.
 
-### 6.2 Recursos infinitos
+### 6.2 Recursos renováveis e rotas distribuídas
 
 “Recurso infinito” significa que:
 
 - cada território recebe uma quantidade fixa de pontos no início;
 - a posição dos pontos não muda;
 - um ponto nunca é consumido, removido ou esgotado;
-- qualquer quantidade de agentes pode escolher o mesmo ponto;
-- não existe reserva ou exclusividade de um ponto;
+- cada rota aceita no máximo oito agentes atribuídos enquanto existirem alternativas;
+- a ocupação das rotas é reconstruída a cada ciclo e pertence à civilização;
 - coletar cria uma unidade carregada pelo agente;
 - a quantidade armazenada na base aumenta quando o agente entrega a unidade.
 
-A **lista de pontos é finita**, enquanto a **capacidade de cada ponto é infinita**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população.
+A **lista de pontos é finita**, enquanto o **estoque de cada ponto é renovável**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população. O limite de oito agentes controla a ocupação visual da rota, não o estoque do ponto.
 
 Como os pontos são imutáveis e pertencem a uma única civilização, a busca não precisa bloquear outros workers.
 
@@ -153,10 +155,14 @@ Como os pontos são imutáveis e pertencem a uma única civilização, a busca n
 Cada agente terá, no mínimo:
 
 - posição;
+- identificador permanente;
 - velocidade em pixels por segundo;
 - estado atual;
 - destino atual;
 - identificador do recurso escolhido;
+- identificador do próximo recurso preparado;
+- ponto de depósito próprio dentro da área da base;
+- quantidade de viagens concluídas;
 - indicação de que está carregando uma unidade;
 - instante real em que começou a coleta;
 - identificador da civilização.
@@ -180,15 +186,25 @@ Searching
 Comportamento:
 
 1. o agente sem carga percorre os pontos de recurso da sua civilização;
-2. calcula a distância até cada ponto;
-3. escolhe o ponto mais próximo;
+2. calcula a distância e a pontuação de cada ponto;
+3. escolhe a rota de menor pontuação que ainda possui capacidade;
 4. move-se até ele;
 5. aguarda o tempo real de coleta;
 6. carrega uma unidade;
-7. retorna à base;
+7. retorna ao seu ponto de depósito dentro da área da base;
 8. deposita a unidade e reinicia o ciclo.
 
-Para manter uma carga computacional contínua, previsível e visível, todos os agentes recalcularão o recurso mais próximo a cada atualização. Quando um agente estiver carregando uma unidade, o resultado ficará preparado como destino da próxima viagem. O cálculo deverá ser realmente utilizado. A distância ao quadrado pode ser usada para evitar `sqrt`, desde que o mesmo algoritmo seja usado em todos os modos.
+Cada agente possui uma preferência pseudoaleatória determinística, derivada de seu identificador, civilização e número da viagem. A escolha usa:
+
+```text
+pontuação = ocupação da rota × peso
+          + distância normalizada × peso
+          + preferência determinística × peso
+```
+
+A ocupação tem o maior peso para distribuir a população por todo o território. Distância e preferência evitam padrões rígidos e mantêm as decisões reproduzíveis.
+
+Para preservar uma carga computacional contínua, todos os agentes avaliam todos os recursos a cada atualização. O destino atual permanece fixo durante a viagem; o resultado da busca contínua fica preparado para a próxima viagem e é validado novamente ao sair da base. O cálculo é realmente utilizado. A distância ao quadrado evita `sqrt`, e o mesmo algoritmo é usado em todos os modos.
 
 Não haverá inicialmente:
 
@@ -400,6 +416,7 @@ O tempo gasto criando ou encerrando threads não fará parte do `Simulation Time
 Cada civilização será atualizada por somente um worker em cada ciclo. Esse worker será o único autorizado a modificar:
 
 - agentes da civilização;
+- ocupação transitória das rotas;
 - recursos armazenados;
 - estado da base;
 - nascimento de agentes;
@@ -419,13 +436,14 @@ A interface mostrará:
 
 - FPS médio da última janela de 1 segundo;
 - frame time médio em milissegundos;
-- tempo do último ciclo de simulação;
+- tempo médio recente de simulação;
 - média, mediana e percentil 95 do `Simulation Time`;
 - tempo de renderização;
 - atualizações concluídas por segundo;
 - população total e por civilização;
 - workers de simulação ativos;
 - threads controladas pelo projeto;
+- worker e ID da thread responsável por cada civilização;
 - tempo real de execução ativa;
 - estado do crescimento populacional;
 - limite populacional;
@@ -444,6 +462,8 @@ Definições:
 O FPS é importante para a demonstração visual, mas a métrica principal para provar o benefício da paralelização será o `Simulation Time`. Se a renderização se tornar o gargalo, o tempo da simulação ainda permitirá avaliar corretamente os workers.
 
 As métricas usarão buffers circulares ou acumuladores reutilizáveis. Não deverá haver criação de listas e objetos a cada frame apenas para calcular estatísticas.
+
+Os valores usados pelas regras internas serão atualizados continuamente. Para permitir leitura durante a apresentação, o painel mostrará uma fotografia desses valores a cada 0,5 segundo. FPS, Frame, Simulação, Render e Updates/s ocuparão colunas independentes e fixas, portanto a mudança do número de dígitos de uma métrica não deslocará as demais.
 
 ---
 
@@ -466,7 +486,7 @@ Threads do projeto: 2 (1 principal + 1 worker)
 Crescimento: ATIVO
 
 [1 worker] [2 workers] [4 workers]
-[Pausar] [Reiniciar] [Stress Test]
+[Pausar] [Reiniciar] [Stress Test] [Tela cheia]
 ```
 
 Quando necessário:
@@ -505,6 +525,15 @@ Não haverá controle de limite de FPS.
 - restaura população, recursos e métricas iniciais;
 - inicia novamente no modo de workers selecionado.
 
+### Tela cheia
+
+- botão `Tela cheia` e tecla `F11` alternam o modo;
+- ao entrar em tela cheia, a área lógica de 1280 × 800 é ampliada proporcionalmente;
+- proporções diferentes recebem margens centralizadas, sem deformar a simulação;
+- o mouse é convertido para as coordenadas lógicas, mantendo os botões clicáveis;
+- ao sair, a aplicação retorna ao modo janela;
+- métricas e amostra de delta são reiniciadas após a troca para que o custo da mudança de vídeo não contamine a comparação.
+
 ### Stress Test
 
 O Stress Test não adicionará milhares de agentes em um único frame. Ele ativará um crescimento acelerado em lotes pequenos e periódicos.
@@ -532,7 +561,9 @@ Os valores abaixo são pontos de partida. Devem ficar centralizados em `Simulati
 | Civilizações | 4 |
 | População inicial por civilização | 10 |
 | Pontos de recurso por civilização | 768 |
-| Capacidade do ponto de recurso | Infinita |
+| Estoque do ponto de recurso | Renovável/inesgotável |
+| Máximo de agentes por rota | 8 |
+| Pontos de depósito por base | 80 (grade 16 × 5) |
 | Unidade carregada por viagem | 1 |
 | Custo inicial de um agente | 10 unidades |
 | Duração real da coleta | 0,25 s |
@@ -543,6 +574,7 @@ Os valores abaixo são pontos de partida. Devem ficar centralizados em `Simulati
 | Bloqueio de crescimento | FPS médio <= 30 |
 | Liberação de crescimento | FPS médio >= 35 por 2 s |
 | Aquecimento após trocar workers | 2 s |
+| Intervalo de atualização visual das métricas | 0,5 s |
 
 Se a diferença entre os modos não for visível, deverá ser ajustada primeiro a quantidade fixa de pontos examinados por agente ou a população do cenário. Não se deve adicionar `Sleep`, espera artificial ou um algoritmo diferente em cada modo.
 
@@ -641,7 +673,7 @@ Tabela de resultados:
 
 Não preencher a documentação com resultados hipotéticos como se fossem reais.
 
-### 18.3 Resultados verificados em 08/09/2026
+### 18.3 Resultados verificados em 09/09/2026
 
 Ambiente da medição:
 
@@ -651,22 +683,23 @@ Ambiente da medição:
 - 16 processadores lógicos disponíveis;
 - build `Release`, fora do depurador;
 - 4.000 agentes no total;
-- 768 pontos de recurso inesgotáveis por civilização;
+- 768 pontos de recurso renováveis por civilização;
+- rotas distribuídas com até oito agentes atribuídos por ponto;
 - aquecimento de 3 segundos;
 - três repetições de 10 segundos por modo.
 
 | População total | Workers | Simulation p50 | Simulation p95 | Speedup |
 |---:|---:|---:|---:|---:|
-| 4.000 | 1 | 6,613 ms | 7,798 ms | 1,00x |
-| 4.000 | 2 | 3,427 ms | 5,058 ms | 1,93x |
-| 4.000 | 4 | 2,546 ms | 2,717 ms | 2,60x |
+| 4.000 | 1 | 14,702 ms | 16,918 ms | 1,00x |
+| 4.000 | 2 | 7,475 ms | 10,449 ms | 1,97x |
+| 4.000 | 4 | 6,022 ms | 6,535 ms | 2,44x |
 
 Calibração gráfica oculta com a população máxima de 20.000 agentes:
 
 | Workers | FPS médio | Simulation Time médio | Render Time médio |
 |---:|---:|---:|---:|
-| 1 | 25,0 | 37,30 ms | 4,88 ms |
-| 4 | 66,0 | 11,66 ms | 4,20 ms |
+| 1 | 13,0 | 73,54 ms | 4,84 ms |
+| 4 | 36,0 | 27,55 ms | 3,75 ms |
 
 Esses valores confirmam no computador atual que a carga atravessa a região de 30 FPS com 1 worker e se recupera claramente com 4 workers. A calibração deverá ser repetida se a apresentação usar outro computador.
 
@@ -691,6 +724,8 @@ Esses valores confirmam no computador atual que a carga atravessa a região de 3
 - [x] criar pontos de recurso fixos e inesgotáveis;
 - [x] criar agentes e estados;
 - [x] implementar busca, movimento, coleta, retorno e depósito;
+- [x] distribuir rotas por ocupação e preferência determinística;
+- [x] distribuir retornos entre vários pontos da área da base;
 - [x] confirmar que a quantidade de pontos nunca diminui ou aumenta.
 
 ### Etapa 3 — Crescimento seguro
