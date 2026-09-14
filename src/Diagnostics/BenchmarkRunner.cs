@@ -268,9 +268,12 @@ public static class BenchmarkRunner
 
     private static SimulationConfig CreateBenchmarkConfig(int requestedPopulation)
     {
+        // Sem a mina central, para manter os resultados comparáveis com as medições
+        // documentadas antes dela. A região crítica é medida por --race-demo.
         return new SimulationConfig
         {
             InitialPopulationPerCivilization = Math.Min(requestedPopulation, 7_000),
+            ContestedMineEnabled = false,
         };
     }
 
