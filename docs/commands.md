@@ -63,7 +63,7 @@ Executar os testes internos:
 O resultado esperado é:
 
 ```text
-10/10 testes passaram.
+19/19 testes passaram.
 ```
 
 Sequência recomendada para preparar tudo:
@@ -93,6 +93,10 @@ Depois disso, abrir a aplicação:
 | `Espaço` | Pausar ou continuar |
 | `R` | Reiniciar a simulação |
 | `F11` | Alternar entre tela cheia e modo janela |
+| `M` | Trocar a sincronização da mina: sem sincronização, `lock`, `Interlocked` |
+| `B` | Ligar ou desligar as batalhas pela mina |
+| `E` | Abrir ou fechar a tela de escalabilidade |
+| `Enter` | Na tela de escalabilidade, medir novamente |
 | `Esc` | Fechar a aplicação |
 
 Os mesmos controles aparecem como botões na parte superior da janela.
@@ -102,6 +106,8 @@ Os mesmos controles aparecem como botões na parte superior da janela.
 - 1 worker de simulação + 1 thread principal de imagem = 2 threads controladas pelo projeto;
 - 2 workers de simulação + 1 thread principal de imagem = 3 threads controladas pelo projeto;
 - 4 workers de simulação + 1 thread principal de imagem = 5 threads controladas pelo projeto.
+
+Com a mina central ativa existe mais uma thread, o **árbitro**. A janela mostra, por exemplo, `Threads: 6 (1 principal + 4 sim. + 1 árbitro)`.
 
 O .NET e o sistema operacional podem criar outras threads internas. A apresentação deve comparar os **workers de simulação controlados pelo projeto**.
 
@@ -124,6 +130,33 @@ O .NET e o sistema operacional podem criar outras threads internas. A apresenta�
 8. Comparar o `Simulation Time` e o FPS.
 9. Se o crescimento tiver sido bloqueado, mostrar que ele volta quando o FPS permanece em pelo menos 15 por dois segundos.
 10. Pressionar `Esc` para fechar.
+
+### Condição de corrida na mina
+
+1. Com 4 workers e população alta, pressionar `M` até aparecer `Sem sincronização`.
+2. Mostrar o contador `Unidades duplicadas (race)` subindo.
+3. Pressionar `1`: com um único worker não existe execução simultânea, e o contador para.
+4. Voltar para `4` e pressionar `M` para `lock`: o contador volta a zero, e aparecem a contenção e o tempo de espera no lock.
+5. Pressionar `M` para `Interlocked`: o contador continua em zero, e aparecem as retentativas do CAS.
+
+### Batalhas pela mina
+
+- Com `Batalhas: ON`, o painel do árbitro mostra vitórias, mortos e saque de cada civilização, e as populações passam a divergir.
+- Na linha do tempo, o worker da civilização maior fica ocupado por mais tempo, e os outros esperam por ele: é o desbalanceamento de carga.
+- Antes de comparar `1` e `4` workers, pressionar `B` para desligar as batalhas e manter as cargas equilibradas.
+
+### Linha do tempo das threads
+
+- Com `1` worker, a barra do Worker 1 mostra A, B, C e D em sequência.
+- Com `4` workers, cada barra mostra uma cor ao mesmo tempo que as outras.
+- A linha `Principal` mostra a renderização (clara) e a espera pelos workers (faixa escura).
+- A linha `Árbitro` mostra traços curtos: ele trabalha pouco e fica bloqueado esperando relatórios.
+
+### Escalabilidade
+
+1. Pressionar `E`. A simulação pausa e a medição de 1 a 64 threads começa.
+2. Mostrar onde a curva se afasta da linha ideal e onde cai depois da linha dos núcleos lógicos.
+3. Pressionar `E` para voltar à simulação.
 
 ---
 
@@ -185,7 +218,41 @@ artifacts\benchmark-presentation.csv
 
 ---
 
-## 8. Smoke test gráfico
+## 8. Condição de corrida e escalabilidade sem janela
+
+Comparar os três modos de sincronização da mina com 1 e 4 workers:
+
+```powershell
+& .\.dotnet\dotnet.exe run -c Release --no-build -- --race-demo 3000 300
+```
+
+Formato:
+
+```text
+--race-demo <população por civilização> <ciclos medidos>
+```
+
+Medir o speedup de 1 a 64 threads sobre a mesma carga:
+
+```powershell
+& .\.dotnet\dotnet.exe run -c Release --no-build -- --scaling 120
+```
+
+Formato:
+
+```text
+--scaling <agentes em cada uma das 64 civilizações>
+```
+
+O resultado é salvo em:
+
+```text
+artifacts\scaling.csv
+```
+
+---
+
+## 9. Smoke test gráfico
 
 Validar a Raylib, o OpenGL e a renderização sem deixar a janela visível:
 
@@ -196,8 +263,10 @@ Validar a Raylib, o OpenGL e a renderização sem deixar a janela visível:
 Formato:
 
 ```text
---smoke-test <população por civilização> <workers>
+--smoke-test <população por civilização> <workers> [frames]
 ```
+
+O número de frames é opcional (padrão 120). Com `1500` frames, os agentes chegam à mina e as disputas aparecem na captura.
 
 Calibração com a população máxima e um worker:
 
@@ -219,7 +288,7 @@ artifacts\
 
 ---
 
-## 9. Usando um SDK global do .NET
+## 10. Usando um SDK global do .NET
 
 Se o computador possuir o SDK do .NET 8 instalado globalmente, é possível retirar `& .\.dotnet\dotnet.exe` dos comandos.
 
@@ -249,7 +318,7 @@ dotnet --list-sdks
 
 ---
 
-## 10. Git e atualização do projeto
+## 11. Git e atualização do projeto
 
 Verificar o estado local:
 
@@ -277,7 +346,7 @@ https://github.com/DuarteFrugoli/c12-projeto-threads
 
 ---
 
-## 11. Comando de emergência
+## 12. Comando de emergência
 
 Se a janela não abrir depois de alguma alteração, executar novamente a preparação completa:
 

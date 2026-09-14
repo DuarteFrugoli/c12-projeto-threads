@@ -902,3 +902,62 @@ Esses itens não ajudam diretamente a explicar a diferença entre processamento 
 12. Explicar por que o ganho não é exatamente 4x e como o número de núcleos influencia o resultado.
 
 Esse roteiro deve permitir que a turma veja a diferença primeiro e entenda a explicação técnica logo depois.
+
+---
+
+## 24. Extensões para Sistemas Operacionais
+
+As regras das seções anteriores continuam valendo. As extensões abaixo substituem apenas a decisão de que as civilizações não interagem: agora elas disputam uma mina central, e essa disputa é o ponto de estudo de sincronização.
+
+### 24.1 Mina central e região crítica
+
+- a mina fica no cruzamento dos territórios; a linha de baixo é espelhada para que todas as bases fiquem à mesma distância dela;
+- cada agente vai à mina a cada 5 viagens, escalonado pelo identificador, garantindo a mesma proporção em todas as civilizações; cada agente faz tentativas de extração em tempo real até completar a carga ou atingir o tempo máximo de espera;
+- o estoque é o único dado da simulação escrito por vários workers ao mesmo tempo;
+- a regeneração é uma fase sequencial executada pela thread principal antes de liberar os workers;
+- três modos de sincronização podem ser trocados entre ciclos: sem sincronização, `lock` e `Interlocked.CompareExchange`;
+- a contabilidade de cada civilização é escrita só pelo próprio worker e permite calcular exatamente quantas unidades foram duplicadas por atualizações perdidas.
+
+### 24.2 Thread árbitro (produtor-consumidor)
+
+- cada worker é produtor: ao terminar uma civilização, envia um relatório de presença na mina;
+- o árbitro é consumidor: uma thread persistente que bloqueia enquanto o buffer está vazio;
+- o buffer é limitado e usa mutex e dois semáforos (vagas e itens); o painel mostra quantas vezes um produtor encontrou o buffer cheio;
+- a cada rodada de 2 segundos o árbitro declara vencedora a civilização com mais agentes-segundo na mina;
+- a decisão é publicada como referência imutável; os workers a leem sem bloquear e aplicam o resultado no próximo ciclo: todos saem da mina, e a vencedora leva a carga;
+- as derrotadas entregam a carga como saque por uma caixa de mensagens atômica e perdem metade dos agentes que estavam na mina, limitado a 5% da população por batalha e a um mínimo de 10 agentes;
+- civilizações com menos da metade da população da vencedora recuam sem baixas;
+- as batalhas podem ser desligadas (`B`) para comparar 1 e 4 workers com cargas equilibradas, já que com 4 workers o ciclo espera o worker da maior civilização;
+- o fechamento do buffer acorda produtores e consumidores, evitando threads presas ao reiniciar.
+
+### 24.3 Linha do tempo das threads
+
+- cada thread grava seus intervalos de trabalho num buffer circular próprio;
+- os workers gravam um intervalo por civilização, com a cor da civilização;
+- a thread principal grava a espera pelos workers e a renderização;
+- o painel mostra os últimos 5 a 1.000 ms, conforme o frame time, e a porcentagem ocupada no último segundo.
+
+### 24.4 Escalabilidade
+
+- carga fixa de 64 civilizações pequenas, sem mina, dividida em blocos contíguos entre N threads;
+- N inclui 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 e o número de núcleos lógicos do computador;
+- cada N usa um estado recém-criado, 5 ciclos de aquecimento e ao menos 12 amostras e 0,35 s de medição; é registrada a mediana;
+- o gráfico compara o speedup medido com o ideal linear e marca os núcleos lógicos.
+
+Resultado de referência em um Apple M4 (10 núcleos lógicos: 4 de desempenho e 6 de eficiência), 7.680 agentes:
+
+| Threads | Mediana | Speedup | Eficiência |
+|---:|---:|---:|---:|
+| 1 | 9,94 ms | 1,00x | 100% |
+| 4 | 2,83 ms | 3,51x | 88% |
+| 10 | 2,30 ms | 4,32x | 43% |
+| 12 | 2,15 ms | 4,62x | 39% |
+| 32 | 2,29 ms | 4,34x | 14% |
+| 64 | 2,77 ms | 3,58x | 6% |
+
+O ganho é quase linear até os núcleos de desempenho, pequeno nos núcleos de eficiência e negativo com excesso de threads.
+
+### 24.5 Determinismo
+
+Com a mina ativa, a ordem das extrações depende do escalonamento, e 1 e 4 workers não produzem mais estados idênticos. O teste de determinismo e os benchmarks `--benchmark` e `--benchmark-final` desativam a mina. A corretude da região crítica é verificada por testes próprios: com `lock` ou `Interlocked` e 4 workers, o estoque bate com a contabilidade.
+
