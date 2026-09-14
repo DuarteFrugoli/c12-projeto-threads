@@ -193,7 +193,7 @@ public sealed class Game : IDisposable
 
     private void RestartSimulation()
     {
-        WorkerMode currentMode = _coordinator.Mode;
+        WorkerMode currentMode = WorkerModeExtensions.FromCount(_coordinator.WorkerCount);
         _coordinator.Dispose();
         _state = SimulationState.Create(_config);
         _coordinator = new SimulationCoordinator(_state, _config, currentMode);

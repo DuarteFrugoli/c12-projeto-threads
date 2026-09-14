@@ -1,10 +1,13 @@
+using C12ProjetoCiv.Concurrency;
+
 namespace C12ProjetoCiv.Core;
 
 public sealed record SimulationConfig
 {
-    public int WindowWidth { get; init; } = 1280;
-    public int WindowHeight { get; init; } = 800;
+    public int WindowWidth { get; init; } = 1600;
+    public int WindowHeight { get; init; } = 900;
     public int HeaderHeight { get; init; } = 175;
+    public int SidePanelWidth { get; init; } = 400;
     public string WindowTitle { get; init; } = "Simulação de Civilizações — Multithreading";
 
     public int Seed { get; init; } = 12062026;
@@ -31,6 +34,25 @@ public sealed record SimulationConfig
     public double StressSpawnIntervalSeconds { get; init; } = 0.05;
     public int StressSpawnBatchPerCivilization { get; init; } = 2;
 
+    public bool ContestedMineEnabled { get; init; } = true;
+    public MineSyncMode MineSyncMode { get; init; } = MineSyncMode.Lock;
+    public int MineTripInterval { get; init; } = 5;
+    public int MineCapacity { get; init; } = 40_000;
+    public double MineRegenerationPerSecond { get; init; } = 5_000;
+    public double MineExtractionsPerSecond { get; init; } = 8;
+    public int MineCarryCapacity { get; init; } = 6;
+    public double MineMaxWaitSeconds { get; init; } = 2.5;
+    public int MineYieldComputationIterations { get; init; } = 2_000;
+    public bool MineBattlesEnabled { get; init; } = true;
+    public double MineBattleCasualtyRate { get; init; } = 0.5;
+    public double MineBattleMaxLossFraction { get; init; } = 0.05;
+    public double MineBattleProtectionRatio { get; init; } = 0.5;
+    public int MineBattleMinimumPopulation { get; init; } = 10;
+    public double ConflictRoundSeconds { get; init; } = 2.0;
+    public int ConflictBufferCapacity { get; init; } = 64;
+
+    public double TimelineHistorySeconds { get; init; } = 1.0;
+
     public double FpsWindowSeconds { get; init; } = 1.0;
     public double LowFpsThreshold { get; init; } = 10.0;
     public double RecoveryFpsThreshold { get; init; } = 15.0;
@@ -40,6 +62,7 @@ public sealed record SimulationConfig
     public int MetricHistoryCapacity { get; init; } = 600;
 
     public int MaxPopulationTotal => CivilizationCount * MaxPopulationPerCivilization;
+    public int WorldWidth => WindowWidth - SidePanelWidth;
 
     public void Validate()
     {
@@ -48,7 +71,7 @@ public sealed record SimulationConfig
             throw new InvalidOperationException("Esta demonstração exige exatamente quatro civilizações.");
         }
 
-        if (WindowWidth <= 0 || WindowHeight <= HeaderHeight)
+        if (WindowWidth <= SidePanelWidth || SidePanelWidth < 0 || WindowHeight <= HeaderHeight)
         {
             throw new InvalidOperationException("As dimensões da janela são inválidas.");
         }
@@ -78,6 +101,23 @@ public sealed record SimulationConfig
             throw new InvalidOperationException("A área de depósito da base é inválida.");
         }
 
+        if (MineTripInterval <= 0 ||
+            MineBattleCasualtyRate < 0 || MineBattleCasualtyRate > 1 ||
+            MineBattleMaxLossFraction < 0 || MineBattleMaxLossFraction > 1 ||
+            MineBattleProtectionRatio < 0 || MineBattleProtectionRatio > 1 ||
+            MineBattleMinimumPopulation < 0 ||
+            MineCapacity <= 0 ||
+            MineRegenerationPerSecond < 0 ||
+            MineExtractionsPerSecond <= 0 ||
+            MineCarryCapacity <= 0 ||
+            MineMaxWaitSeconds <= 0 ||
+            MineYieldComputationIterations < 0 ||
+            ConflictRoundSeconds <= 0 ||
+            ConflictBufferCapacity <= 0)
+        {
+            throw new InvalidOperationException("A configuração da mina central é inválida.");
+        }
+
         if (LowFpsThreshold <= 0 || RecoveryFpsThreshold <= LowFpsThreshold)
         {
             throw new InvalidOperationException("Os limites de FPS precisam possuir histerese válida.");
@@ -85,7 +125,8 @@ public sealed record SimulationConfig
 
         if (MetricHistoryCapacity <= 0 ||
             FpsWindowSeconds <= 0 ||
-            MetricsDisplayRefreshSeconds <= 0)
+            MetricsDisplayRefreshSeconds <= 0 ||
+            TimelineHistorySeconds <= 0)
         {
             throw new InvalidOperationException("A configuração das métricas é inválida.");
         }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using C12ProjetoCiv.Concurrency;
 using C12ProjetoCiv.Core;
 using C12ProjetoCiv.Simulation;
 
@@ -6,7 +7,15 @@ namespace C12ProjetoCiv.Entities;
 
 public sealed class Civilization
 {
+    private const int MineSlotHashSalt = 2_000_003;
+    private const int BattleHashSalt = 3_000_017;
+    private const float MineSlotInnerRadius = 34f;
+    private const float MineSlotRadiusRange = 40f;
+
     private readonly Random _random;
+    private readonly ContestedMine? _mine;
+    private readonly Vector2 _mineEntranceDirection;
+    private long _lastSeenControlGeneration;
     private readonly int[] _resourceOccupancy;
     private readonly int _baseDropOffColumns;
     private readonly int _baseDropOffRows;
@@ -26,7 +35,9 @@ public sealed class Civilization
         ResourceNode[] resourceNodes,
         int randomSeed,
         int initialPopulation,
-        SimulationConfig config)
+        SimulationConfig config,
+        ContestedMine? mine,
+        Vector2 mineEntranceDirection)
     {
         Id = id;
         Name = name;
@@ -41,6 +52,8 @@ public sealed class Civilization
         _baseDropOffHeight = config.BaseDropOffHeight;
         _baseDropOffSlotStep = FindCoprimeStep(_baseDropOffColumns * _baseDropOffRows);
         _random = new Random(randomSeed);
+        _mine = mine;
+        _mineEntranceDirection = mineEntranceDirection;
         Agents = new List<Agent>(config.MaxPopulationPerCivilization);
 
         for (int index = 0; index < initialPopulation; index++)
@@ -58,11 +71,23 @@ public sealed class Civilization
     public List<Agent> Agents { get; }
     public long StoredResources { get; private set; }
 
-    public void Update(SimulationFrameCommand command, SimulationConfig config)
+    /// <summary>Escrito somente pelo worker desta civilização.</summary>
+    public MineExtractionStats MineStats { get; } = new();
+
+    /// <summary>Agentes extraindo na mina no último ciclo.</summary>
+    public int MinersAtMine { get; private set; }
+
+    public void Update(SimulationFrameCommand command, SimulationConfig config, WorkerContext worker)
     {
         int populationAtCycleStart = Agents.Count;
         int deliveredUnits = 0;
+        int minersAtMine = 0;
+        int extractedFromMine = 0;
         RebuildResourceOccupancy();
+        CollectLoot();
+        MineControl? battleResult = ReadNewBattleResult();
+        int deathsAllowed = battleResult is null ? 0 : GetAllowedBattleDeaths(config);
+        int deaths = 0;
 
         for (int index = 0; index < populationAtCycleStart; index++)
         {
@@ -82,22 +107,47 @@ public sealed class Civilization
                     config);
             }
 
-            Vector2 resourcePosition = agent.TargetResourceIndex >= 0
-                ? ResourceNodes[agent.TargetResourceIndex].Position
-                : default;
-
-            if (agent.Update(
-                    resourcePosition,
-                    agent.DepositPosition,
-                    command.DeltaSeconds,
-                    command.ElapsedSeconds,
-                    config))
+            if (agent.IsMiningAtMine)
             {
-                deliveredUnits += config.ResourceUnitsPerDelivery;
+                minersAtMine++;
+
+                if (battleResult is not null)
+                {
+                    if (ApplyBattleToAgent(agent, battleResult, ref deathsAllowed))
+                    {
+                        deaths++;
+                        continue;
+                    }
+                }
+                else
+                {
+                    extractedFromMine += MineWithAgent(agent, command, config);
+                }
             }
+
+            Vector2 resourcePosition = agent.IsMineTrip
+                ? GetMineSlot(agent.Id)
+                : agent.TargetResourceIndex >= 0
+                    ? ResourceNodes[agent.TargetResourceIndex].Position
+                    : default;
+
+            deliveredUnits += agent.Update(
+                resourcePosition,
+                agent.DepositPosition,
+                command.DeltaSeconds,
+                command.ElapsedSeconds,
+                config);
+        }
+
+        if (deaths > 0)
+        {
+            Agents.RemoveAll(static agent => agent.DiedInBattle);
+            MineStats.BattleDeaths += deaths;
         }
 
         StoredResources += deliveredUnits;
+        MinersAtMine = minersAtMine;
+        SendMineReport(command, worker, minersAtMine, extractedFromMine);
 
         if (!command.AllowPopulationGrowth || Agents.Count >= config.MaxPopulationPerCivilization)
         {
@@ -112,6 +162,164 @@ public sealed class Civilization
         {
             TryNaturalSpawn(command.ElapsedSeconds, config);
         }
+    }
+
+    /// <summary>
+    /// Leitura sem bloqueio: o árbitro troca a referência inteira de forma atômica.
+    /// Retorna a decisão somente na primeira vez que esta civilização a enxerga.
+    /// </summary>
+    private MineControl? ReadNewBattleResult()
+    {
+        if (_mine is null)
+        {
+            return null;
+        }
+
+        MineControl control = _mine.Control;
+
+        if (control.Generation == _lastSeenControlGeneration)
+        {
+            return null;
+        }
+
+        _lastSeenControlGeneration = control.Generation;
+        return control.WasContested ? control : null;
+    }
+
+    /// <summary>
+    /// Depois de uma disputa todos deixam a mina. A vencedora leva a carga; as derrotadas
+    /// entregam a carga como saque e podem perder o agente. Retorna true se o agente morreu.
+    /// </summary>
+    private bool ApplyBattleToAgent(Agent agent, MineControl battle, ref int deathsAllowed)
+    {
+        int winner = battle.ControllerCivilizationId;
+
+        if (winner == Id)
+        {
+            agent.LeaveMine();
+            return false;
+        }
+
+        if (agent.MineLoad > 0)
+        {
+            _mine!.SendLoot(winner, agent.MineLoad);
+            MineStats.LootLost += agent.MineLoad;
+            agent.DropMineLoad();
+        }
+
+        MineStats.DefeatedMiners++;
+        agent.LeaveMine();
+
+        if (deathsAllowed <= 0 ||
+            GetPreference(agent.Id, (int)battle.Generation, BattleHashSalt) >= battle.CasualtyRateFor(Id))
+        {
+            return false;
+        }
+
+        agent.MarkDiedInBattle();
+        deathsAllowed--;
+        return true;
+    }
+
+    /// <summary>
+    /// Limita as baixas de uma batalha a uma fração da população e preserva um mínimo,
+    /// para que nenhuma civilização seja eliminada.
+    /// </summary>
+    private int GetAllowedBattleDeaths(SimulationConfig config)
+    {
+        int byFraction = (int)(Agents.Count * config.MineBattleMaxLossFraction);
+        int aboveMinimum = Agents.Count - config.MineBattleMinimumPopulation;
+        return Math.Max(0, Math.Min(byFraction, aboveMinimum));
+    }
+
+    private void CollectLoot()
+    {
+        if (_mine is null)
+        {
+            return;
+        }
+
+        long loot = _mine.CollectLoot(Id);
+        StoredResources += loot;
+        MineStats.LootReceived += loot;
+    }
+
+    private int MineWithAgent(
+        Agent agent,
+        SimulationFrameCommand command,
+        SimulationConfig config)
+    {
+        ContestedMine mine = _mine!;
+        int extracted = 0;
+        agent.MineExtractionProgress = Math.Min(
+            agent.MineExtractionProgress + (config.MineExtractionsPerSecond * command.DeltaSeconds),
+            config.MineExtractionsPerSecond);
+
+        while (agent.MineExtractionProgress >= 1 && agent.MineLoad < config.MineCarryCapacity)
+        {
+            agent.MineExtractionProgress -= 1;
+            int units = mine.Extract(MineStats);
+
+            if (units == 0)
+            {
+                agent.MineExtractionProgress = 0;
+                break;
+            }
+
+            agent.AddMineLoad(units);
+            extracted += units;
+        }
+
+        if (agent.MineLoad >= config.MineCarryCapacity ||
+            command.ElapsedSeconds - agent.CollectionStartedAtSeconds >= config.MineMaxWaitSeconds)
+        {
+            agent.LeaveMine();
+        }
+
+        return extracted;
+    }
+
+    private void SendMineReport(
+        SimulationFrameCommand command,
+        WorkerContext worker,
+        int minersAtMine,
+        int extractedFromMine)
+    {
+        BoundedBuffer<MinePresenceReport>? reports = _mine?.Reports;
+
+        if (reports is null || command.DeltaSeconds <= 0)
+        {
+            return;
+        }
+
+        // Produtor: pode bloquear se a thread árbitro estiver atrasada e o buffer encher.
+        reports.TryAdd(
+            new MinePresenceReport(
+                Id,
+                worker.WorkerNumber,
+                command.ElapsedSeconds,
+                command.DeltaSeconds,
+                minersAtMine,
+                extractedFromMine,
+                Agents.Count),
+            worker.CancellationToken);
+    }
+
+    private Vector2 GetMineSlot(int agentId)
+    {
+        if (_mine is null)
+        {
+            return BasePosition;
+        }
+
+        float angleNoise = GetPreference(agentId, 0, MineSlotHashSalt);
+        float radiusNoise = GetPreference(agentId, 1, MineSlotHashSalt);
+        float angle = 0.12f + (angleNoise * ((MathF.PI / 2f) - 0.24f));
+        float radius = MineSlotInnerRadius + (radiusNoise * MineSlotRadiusRange);
+
+        return _mine.Position + new Vector2(
+            _mineEntranceDirection.X * MathF.Cos(angle) * radius,
+            _mineEntranceDirection.Y * MathF.Sin(angle) * radius);
     }
 
     private void RebuildResourceOccupancy()
@@ -140,6 +348,18 @@ public sealed class Civilization
             agent.CompletedTrips,
             agent.NextResourceIndex,
             config);
+        // Cada agente vai à mina a cada N viagens, escalonado pelo identificador. Um sorteio
+        // aqui favorecia sempre as mesmas civilizações; uma regra fixa dá a mesma proporção a todas.
+        agent.IsMineTrip = _mine is not null &&
+            (agent.Id + agent.CompletedTrips) % config.MineTripInterval == 0;
+
+        if (agent.IsMineTrip)
+        {
+            agent.TargetResourceIndex = -1;
+            agent.NextResourceIndex = resourceIndex;
+            return;
+        }
+
         agent.TargetResourceIndex = resourceIndex;
         agent.NextResourceIndex = -1;
         _resourceOccupancy[resourceIndex]++;
