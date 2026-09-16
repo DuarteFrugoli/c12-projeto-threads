@@ -13,6 +13,10 @@ public static class UserInterface
         bool restart = Raylib.IsKeyPressed(KeyboardKey.R);
         bool toggleStress = Raylib.IsKeyPressed(KeyboardKey.S);
         bool toggleFullscreen = Raylib.IsKeyPressed(KeyboardKey.F11);
+        bool cycleMineSync = Raylib.IsKeyPressed(KeyboardKey.M);
+        bool toggleBattles = Raylib.IsKeyPressed(KeyboardKey.B);
+        bool toggleScaling = Raylib.IsKeyPressed(KeyboardKey.E);
+        bool rerunScaling = Raylib.IsKeyPressed(KeyboardKey.Enter);
 
         if (Raylib.IsKeyPressed(KeyboardKey.One))
         {
@@ -59,6 +63,18 @@ public static class UserInterface
             {
                 toggleFullscreen = true;
             }
+            else if (Contains(UiLayout.MineSyncButton, mouse))
+            {
+                cycleMineSync = true;
+            }
+            else if (Contains(UiLayout.BattlesButton, mouse))
+            {
+                toggleBattles = true;
+            }
+            else if (Contains(UiLayout.ScalingButton, mouse))
+            {
+                toggleScaling = true;
+            }
         }
 
         return new UiCommand(
@@ -66,7 +82,11 @@ public static class UserInterface
             togglePause,
             restart,
             toggleStress,
-            toggleFullscreen);
+            toggleFullscreen,
+            cycleMineSync,
+            toggleBattles,
+            toggleScaling,
+            rerunScaling);
     }
 
     private static bool Contains(FloatRectangle rectangle, Vector2 point)

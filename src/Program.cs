@@ -29,10 +29,23 @@ public static class Program
                 return BenchmarkRunner.RunPresentation(args);
             }
 
+            if (args.Length > 0 &&
+                args[0].Equals("--scaling", StringComparison.OrdinalIgnoreCase))
+            {
+                return ScalingBenchmark.RunCli(args);
+            }
+
+            if (args.Length > 0 &&
+                args[0].Equals("--race-demo", StringComparison.OrdinalIgnoreCase))
+            {
+                return RaceDemoRunner.Run(args);
+            }
+
             if (args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
             {
                 int populationPerCivilization = ParseBoundedIntegerArgument(args, 1, 10, 7_000);
                 int workerCount = ParseWorkerCountArgument(args, 2);
+                int frameCount = ParseBoundedIntegerArgument(args, 3, 120, 20_000);
                 SimulationConfig smokeConfig = new()
                 {
                     InitialPopulationPerCivilization = populationPerCivilization,
@@ -49,7 +62,7 @@ public static class Program
                     Environment.CurrentDirectory,
                     relativeScreenshotPath);
                 smokeGame.Run(
-                    frameLimit: 120,
+                    frameLimit: frameCount,
                     hiddenWindow: true,
                     screenshotPath: relativeScreenshotPath);
 
@@ -59,7 +72,7 @@ public static class Program
                 }
 
                 Console.WriteLine(
-                    $"Smoke test gráfico concluído: 120 frames e captura em '{absoluteScreenshotPath}'.");
+                    $"Smoke test gráfico concluído: {frameCount} frames e captura em '{absoluteScreenshotPath}'.");
                 Console.WriteLine(
                     $"Resultado: {smokeGame.Metrics.AverageFps:F1} FPS | " +
                     $"Simulação {smokeGame.Metrics.AverageSimulationMilliseconds:F2} ms | " +
