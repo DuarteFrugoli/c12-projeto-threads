@@ -4,4 +4,5 @@ public readonly record struct SimulationFrameCommand(
     double DeltaSeconds,
     double ElapsedSeconds,
     bool AllowPopulationGrowth,
-    bool StressModeEnabled);
+    bool StressModeEnabled,
+    ResourceSchedulingMode SchedulingMode = ResourceSchedulingMode.Priority);

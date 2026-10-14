@@ -22,4 +22,5 @@ public readonly record struct FrameView(
     double ElapsedSeconds,
     bool Paused,
     bool StressMode,
+    ResourceSchedulingMode ResourceSchedulingMode,
     bool Fullscreen);

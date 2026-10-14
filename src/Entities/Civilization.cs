@@ -19,6 +19,7 @@ public sealed class Civilization
     private readonly int[] _resourceOccupancy;
     private readonly int _baseDropOffColumns;
     private readonly int _baseDropOffRows;
+    private readonly int _agentLevelCount;
     private readonly float _baseDropOffWidth;
     private readonly float _baseDropOffHeight;
     private readonly int _baseDropOffSlotStep;
@@ -48,6 +49,7 @@ public sealed class Civilization
         _resourceOccupancy = new int[resourceNodes.Length];
         _baseDropOffColumns = config.BaseDropOffColumns;
         _baseDropOffRows = config.BaseDropOffRows;
+        _agentLevelCount = config.AgentLevelCount;
         _baseDropOffWidth = config.BaseDropOffWidth;
         _baseDropOffHeight = config.BaseDropOffHeight;
         _baseDropOffSlotStep = FindCoprimeStep(_baseDropOffColumns * _baseDropOffRows);
@@ -76,6 +78,10 @@ public sealed class Civilization
 
     /// <summary>Agentes extraindo na mina no último ciclo.</summary>
     public int MinersAtMine { get; private set; }
+
+    public int LocalResourceWaiters { get; private set; }
+    public int LocalResourceCollectors { get; private set; }
+    public double AverageLocalResourceWaitSeconds { get; private set; }
 
     public void Update(SimulationFrameCommand command, SimulationConfig config, WorkerContext worker)
     {
@@ -131,12 +137,25 @@ public sealed class Civilization
                     ? ResourceNodes[agent.TargetResourceIndex].Position
                     : default;
 
+            bool wasCollectingLocalResource =
+                !agent.IsMineTrip && agent.State == AgentState.Collecting;
+            int localResourceIndex = agent.TargetResourceIndex;
             deliveredUnits += agent.Update(
                 resourcePosition,
                 agent.DepositPosition,
                 command.DeltaSeconds,
                 command.ElapsedSeconds,
                 config);
+
+            if (wasCollectingLocalResource && agent.State == AgentState.ReturningToBase)
+            {
+                ResourceNodes[localResourceIndex].Release(agent.Id);
+            }
+
+            if (agent.State == AgentState.WaitingForResource)
+            {
+                ResourceNodes[agent.TargetResourceIndex].Enqueue(agent, command.ElapsedSeconds);
+            }
         }
 
         if (deaths > 0)
@@ -147,6 +166,7 @@ public sealed class Civilization
 
         StoredResources += deliveredUnits;
         MinersAtMine = minersAtMine;
+        ScheduleResourceQueues(command, config);
         SendMineReport(command, worker, minersAtMine, extractedFromMine);
 
         if (!command.AllowPopulationGrowth || Agents.Count >= config.MaxPopulationPerCivilization)
@@ -305,6 +325,36 @@ public sealed class Civilization
             worker.CancellationToken);
     }
 
+    private void ScheduleResourceQueues(
+        SimulationFrameCommand command,
+        SimulationConfig config)
+    {
+        int waiting = 0;
+        int collecting = 0;
+        long admissions = 0;
+        double totalWaitSeconds = 0;
+
+        foreach (ResourceNode resource in ResourceNodes)
+        {
+            resource.AdmitWaiting(
+                command.SchedulingMode,
+                command.ElapsedSeconds,
+                config.ResourcePriorityAgingSeconds,
+                config.AgentLevelCount);
+            ResourceNodeStatistics statistics = resource.GetStatistics();
+            waiting += statistics.WaitingCount;
+            collecting += statistics.ActiveCollectors;
+            admissions += statistics.Admissions;
+            totalWaitSeconds += statistics.TotalWaitSeconds;
+        }
+
+        LocalResourceWaiters = waiting;
+        LocalResourceCollectors = collecting;
+        AverageLocalResourceWaitSeconds = admissions == 0
+            ? 0
+            : totalWaitSeconds / admissions;
+    }
+
     private Vector2 GetMineSlot(int agentId)
     {
         if (_mine is null)
@@ -461,11 +511,12 @@ public sealed class Civilization
     private void SpawnAgent()
     {
         int agentId = _nextAgentId++;
+        int level = 1 + (agentId % _agentLevelCount);
         Vector2 depositPosition = CreateDepositPosition(agentId);
         float angle = (float)(_random.NextDouble() * Math.Tau);
         float radius = (float)(_random.NextDouble() * 2.0);
         Vector2 jitter = new(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
-        Agents.Add(new Agent(agentId, Id, depositPosition + jitter, depositPosition));
+        Agents.Add(new Agent(agentId, Id, level, depositPosition + jitter, depositPosition));
     }
 
     private Vector2 CreateDepositPosition(int agentId)

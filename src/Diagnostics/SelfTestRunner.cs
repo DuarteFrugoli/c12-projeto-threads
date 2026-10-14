@@ -15,6 +15,9 @@ public static class SelfTestRunner
         [
             ("recursos permanecem inesgotáveis", ResourcesRemainUnchanged),
             ("agentes usam rotas e depósitos distribuídos", AgentsUseDistributedRoutes),
+            ("semáforo limita coletores e FCFS preserva chegada", ResourceSemaphoreAndFcfsWork),
+            ("escalonador atende primeiro a maior prioridade", PrioritySchedulerUsesAgentLevel),
+            ("aging impede inanição de prioridade baixa", PriorityAgingPreventsStarvation),
             ("1 e 4 workers produzem o mesmo estado", WorkerModesAreDeterministic),
             ("parâmetros padrão da apresentação", DefaultPresentationParametersAreCorrect),
             ("bloqueio e recuperação do crescimento", GrowthControllerUsesHysteresis),
@@ -121,6 +124,83 @@ public static class SelfTestRunner
         }
     }
 
+    private static void ResourceSemaphoreAndFcfsWork()
+    {
+        using ResourceNode resource = new(Vector2.Zero, collectionCapacity: 1);
+        Agent first = CreateWaitingAgent(id: 1, level: 1);
+        Agent second = CreateWaitingAgent(id: 2, level: 5);
+        resource.Enqueue(first, elapsedSeconds: 1.0);
+        resource.Enqueue(second, elapsedSeconds: 1.1);
+
+        int admitted = resource.AdmitWaiting(
+            ResourceSchedulingMode.Fcfs,
+            elapsedSeconds: 2.0,
+            agingIntervalSeconds: 1.0,
+            maximumAgentLevel: 5);
+
+        Assert(admitted == 1, "Um recurso de capacidade 1 admitiu mais de um agente.");
+        Assert(first.State == AgentState.Collecting, "O FCFS não escolheu quem chegou primeiro.");
+        Assert(second.State == AgentState.WaitingForResource, "O segundo agente não permaneceu na fila.");
+        Assert(resource.ActiveCollectors == 1 && resource.WaitingCount == 1, "O semáforo não refletiu a ocupação esperada.");
+
+        resource.Release(first.Id);
+        resource.AdmitWaiting(
+            ResourceSchedulingMode.Fcfs,
+            elapsedSeconds: 2.1,
+            agingIntervalSeconds: 1.0,
+            maximumAgentLevel: 5);
+        Assert(second.State == AgentState.Collecting, "A vaga liberada não foi entregue ao próximo agente.");
+    }
+
+    private static void PrioritySchedulerUsesAgentLevel()
+    {
+        using ResourceNode resource = new(Vector2.Zero, collectionCapacity: 1);
+        Agent lowLevel = CreateWaitingAgent(id: 1, level: 1);
+        Agent highLevel = CreateWaitingAgent(id: 2, level: 5);
+        resource.Enqueue(lowLevel, elapsedSeconds: 1.0);
+        resource.Enqueue(highLevel, elapsedSeconds: 1.1);
+
+        resource.AdmitWaiting(
+            ResourceSchedulingMode.Priority,
+            elapsedSeconds: 1.2,
+            agingIntervalSeconds: 1.0,
+            maximumAgentLevel: 5);
+
+        Assert(highLevel.State == AgentState.Collecting, "O agente de maior nível não recebeu prioridade.");
+        Assert(lowLevel.State == AgentState.WaitingForResource, "O agente de menor nível saiu da fila indevidamente.");
+    }
+
+    private static void PriorityAgingPreventsStarvation()
+    {
+        using ResourceNode resource = new(Vector2.Zero, collectionCapacity: 1);
+        Agent oldLowLevel = CreateWaitingAgent(id: 1, level: 1);
+        Agent newHighLevel = CreateWaitingAgent(id: 2, level: 5);
+        resource.Enqueue(oldLowLevel, elapsedSeconds: 0);
+        resource.Enqueue(newHighLevel, elapsedSeconds: 4.0);
+
+        resource.AdmitWaiting(
+            ResourceSchedulingMode.Priority,
+            elapsedSeconds: 4.0,
+            agingIntervalSeconds: 1.0,
+            maximumAgentLevel: 5);
+
+        Assert(
+            oldLowLevel.State == AgentState.Collecting,
+            "O aging não elevou a prioridade do agente que esperou mais tempo.");
+        Assert(
+            newHighLevel.State == AgentState.WaitingForResource,
+            "O desempate não preservou a chegada após o aging.");
+    }
+
+    private static Agent CreateWaitingAgent(int id, int level)
+    {
+        return new Agent(id, 0, level, Vector2.Zero, Vector2.Zero)
+        {
+            State = AgentState.WaitingForResource,
+            TargetResourceIndex = 0,
+        };
+    }
+
     private static void AgentsUseDistributedRoutes()
     {
         SimulationConfig config = new()
@@ -207,9 +287,24 @@ public static class SelfTestRunner
             config.MaxPopulationTotal == 28_000,
             "O limite padrão deveria ser 7.000 por civilização e 28.000 no total.");
         Assert(
+            config.ResourceNodesPerCivilization == 256 &&
+            config.MaxAgentsPerResourceRoute == 28,
+            "A configuração padrão deveria usar 256 recursos e até 28 agentes por rota.");
+        Assert(
             config.ResourceNodesPerCivilization * config.MaxAgentsPerResourceRoute >=
             config.MaxPopulationPerCivilization,
             "As rotas configuradas não comportam a população máxima.");
+        Assert(
+            config.ResourceCollectionCapacity == 1 &&
+            config.AgentLevelCount == 5 &&
+            Math.Abs(config.ResourcePriorityAgingSeconds - 1.0) < 0.000_001 &&
+            config.DefaultResourceSchedulingMode == ResourceSchedulingMode.Priority,
+            "Os parâmetros padrão do escalonamento de recursos estão incorretos.");
+        Assert(
+            config.ResourceUnitsPerDelivery == 2 &&
+            Math.Abs(config.CollectionSecondsPerResourceUnit - 1.0) < 0.000_001 &&
+            Math.Abs(config.CollectionDurationSeconds - 2.0) < 0.000_001,
+            "A coleta padrão deveria produzir 2 unidades em 2 segundos.");
         Assert(
             Math.Abs(config.LowFpsThreshold - 10.0) < 0.000_001,
             "O bloqueio padrão deveria acontecer em 10 FPS.");
@@ -253,7 +348,7 @@ public static class SelfTestRunner
             InitialPopulationPerCivilization = 20,
             ResourceNodesPerCivilization = 16,
             AgentSpeedPixelsPerSecond = 1_000,
-            CollectionDurationSeconds = 0,
+            CollectionSecondsPerResourceUnit = 0,
             NaturalSpawnIntervalSeconds = 0.01,
             AgentCost = 2,
             MaxPopulationPerCivilization = 50,

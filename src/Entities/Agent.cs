@@ -8,17 +8,21 @@ public sealed class Agent
     public Agent(
         int id,
         int civilizationId,
+        int level,
         Vector2 position,
         Vector2 depositPosition)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(level);
         Id = id;
         CivilizationId = civilizationId;
+        Level = level;
         Position = position;
         DepositPosition = depositPosition;
     }
 
     public int Id { get; }
     public int CivilizationId { get; }
+    public int Level { get; }
     public Vector2 Position { get; private set; }
     public Vector2 DepositPosition { get; }
     public AgentState State { get; set; } = AgentState.Searching;
@@ -59,6 +63,19 @@ public sealed class Agent
         State = AgentState.ReturningToBase;
     }
 
+    /// <summary>Chamado pelo escalonador depois que o semáforo concede uma vaga.</summary>
+    public void BeginCollecting(double elapsedSeconds)
+    {
+        if (State != AgentState.WaitingForResource)
+        {
+            throw new InvalidOperationException(
+                $"O agente {Id} não estava aguardando um recurso.");
+        }
+
+        State = AgentState.Collecting;
+        CollectionStartedAtSeconds = elapsedSeconds;
+    }
+
     /// <summary>
     /// Atualiza o agente e retorna quantas unidades foram depositadas na base neste ciclo.
     /// </summary>
@@ -78,10 +95,21 @@ public sealed class Agent
             case AgentState.MovingToResource:
                 if (MoveTowards(resourcePosition, deltaSeconds, config))
                 {
-                    State = AgentState.Collecting;
-                    CollectionStartedAtSeconds = elapsedSeconds;
+                    if (IsMineTrip)
+                    {
+                        State = AgentState.Collecting;
+                        CollectionStartedAtSeconds = elapsedSeconds;
+                    }
+                    else
+                    {
+                        State = AgentState.WaitingForResource;
+                    }
                 }
 
+                break;
+
+            case AgentState.WaitingForResource:
+                // O ResourceNode muda o estado quando o semáforo concede uma vaga.
                 break;
 
             case AgentState.Collecting:

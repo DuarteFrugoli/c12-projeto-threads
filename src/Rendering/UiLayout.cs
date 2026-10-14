@@ -16,6 +16,7 @@ public static class UiLayout
     public static readonly FloatRectangle MineSyncButton = new(900, 125, 170, 34);
     public static readonly FloatRectangle BattlesButton = new(1080, 125, 160, 34);
     public static readonly FloatRectangle ScalingButton = new(1250, 125, 150, 34);
+    public static readonly FloatRectangle ResourceSchedulingButton = new(1410, 125, 170, 34);
 
     public static Camera2D CreateVirtualCamera(SimulationConfig config)
     {

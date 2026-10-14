@@ -119,7 +119,9 @@ public sealed class SimulationState
             {
                 Vector2 relative = relativeResources[resourceIndex];
                 float relativeY = mirrored ? 1f - relative.Y : relative.Y;
-                nodes[resourceIndex] = new ResourceNode(territory.FromRelative(relative.X, relativeY));
+                nodes[resourceIndex] = new ResourceNode(
+                    territory.FromRelative(relative.X, relativeY),
+                    config.ResourceCollectionCapacity);
             }
 
             Vector2 basePosition = territory.FromRelative(0.5f, mirrored ? 0.22f : 0.78f);
@@ -164,14 +166,18 @@ public sealed class SimulationState
             config.HeaderHeight,
             config.WorldWidth / 2f,
             (config.WindowHeight - config.HeaderHeight) / 2f);
-        ResourceNode[] nodes = relativeResources
-            .Select(relative => new ResourceNode(territory.FromRelative(relative.X, relative.Y)))
-            .ToArray();
         Vector2 basePosition = territory.FromRelative(0.5f, 0.78f);
         Civilization[] civilizations = new Civilization[civilizationCount];
 
         for (int index = 0; index < civilizationCount; index++)
         {
+            // Os ResourceNodes agora possuem fila e semáforo, portanto cada civilização
+            // precisa de instâncias próprias mesmo quando reutiliza o mesmo layout visual.
+            ResourceNode[] nodes = relativeResources
+                .Select(relative => new ResourceNode(
+                    territory.FromRelative(relative.X, relative.Y),
+                    workloadConfig.ResourceCollectionCapacity))
+                .ToArray();
             civilizations[index] = new Civilization(
                 index,
                 $"W{index}",

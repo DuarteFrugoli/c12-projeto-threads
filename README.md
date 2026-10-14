@@ -7,7 +7,9 @@ Aplicação didática em C# e Raylib-cs que compara a atualização de quatro ci
 - 1 worker de simulação + 1 thread principal/renderização = 2 threads controladas pelo projeto;
 - 4 workers de simulação + 1 thread principal/renderização = 5 threads controladas pelo projeto;
 - recursos renováveis em pontos fixos, com rotas distribuídas entre os agentes;
-- no máximo 10 agentes atribuídos à mesma rota de recurso enquanto houver alternativas;
+- no máximo 28 agentes atribuídos à mesma rota de recurso enquanto houver alternativas;
+- cada ponto permite uma coleta simultânea por padrão, com a vaga representada por um `SemaphoreSlim`;
+- aldeões de níveis 1 a 5 aguardam numa fila alternável entre FCFS e prioridade com aging;
 - base com 80 pontos de depósito, evitando que todos retornem ao mesmo pixel;
 - nascimento natural de no máximo um agente por civilização a cada 0,05 segundo;
 - cronômetro de tempo real, sem relógio fictício de jogo;
@@ -57,6 +59,7 @@ Com o SDK local deste diretório:
 | Pausar/continuar | `Espaço` | `Pausar` |
 | Reiniciar | `R` | `Reiniciar` |
 | Ativar/desativar Stress Test | `S` | `Stress Test` |
+| Alternar o escalonamento dos recursos | `P` | `Fila: FCFS/PRIORIDADE` |
 | Alternar tela cheia | `F11` | `Tela cheia` / `Modo janela` |
 | Trocar a sincronização da mina | `M` | `Mina: ...` |
 | Ligar/desligar as batalhas pela mina | `B` | `Batalhas: ON/OFF` |
@@ -67,6 +70,21 @@ Com 4 threads de simulação a janela mostra 6 threads controladas pelo projeto:
 
 O Stress Test adiciona agentes gradualmente. Ele respeita tanto o limite populacional absoluto quanto o bloqueio de crescimento por FPS baixo.
 Por ser uma ferramenta de demonstração, seus agentes não consomem o estoque de recursos; o crescimento natural continua dependendo das entregas.
+
+## Escalonamento dos aldeões nos recursos
+
+O estoque dos recursos locais continua renovável, mas cada ponto possui capacidade limitada de coleta. Por padrão, somente um aldeão coleta por vez. A vaga é controlada por um `SemaphoreSlim`; os demais ficam no estado `WaitingForResource` até o escalonador conceder acesso.
+
+Cada coleta local produz **2 unidades**, com **1 segundo por unidade**. Portanto, o aldeão mantém a vaga do semáforo durante 2 segundos antes de voltar à base, tornando as filas fáceis de observar.
+
+A tecla `P` alterna entre:
+
+| Algoritmo | Regra |
+|---|---|
+| FCFS | Atende primeiro quem chegou primeiro. |
+| Prioridade | Atende primeiro o maior nível. A prioridade efetiva aumenta a cada segundo de espera até o nível máximo, evitando starvation. |
+
+Os aldeões possuem níveis de 1 a 5, distribuídos deterministicamente. A coleta é não preemptiva: depois de receber a vaga, o aldeão termina a coleta antes de liberar o semáforo. A interface mostra o algoritmo ativo e, em cada civilização, o número de aldeões na fila, os coletores ativos e a espera média.
 
 ## Verificações sem abrir a janela
 
@@ -135,7 +153,7 @@ Como a mina é compartilhada, a simulação com ela deixa de ser determinística
 
 ## Calibração atual
 
-Como referência anterior, com 20.000 agentes e 768 pontos renováveis por civilização, o smoke test gráfico no computador de desenvolvimento mediu aproximadamente:
+Como referência anterior, antes do escalonamento por filas, o projeto usava 768 pontos renováveis por civilização e mediu aproximadamente:
 
 - 1 worker: 13 FPS e 73,54 ms de simulação;
 - 4 workers: 36 FPS e 27,55 ms de simulação.

@@ -5,6 +5,7 @@ public readonly record struct UiCommand(
     bool TogglePause,
     bool Restart,
     bool ToggleStressMode,
+    bool CycleResourceSchedulingMode,
     bool ToggleFullscreenMode,
     bool CycleMineSyncMode,
     bool ToggleBattles,

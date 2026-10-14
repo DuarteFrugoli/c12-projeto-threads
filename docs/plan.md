@@ -126,7 +126,7 @@ Cada civilização terá:
 - território retangular próprio;
 - uma base;
 - uma lista de agentes;
-- uma lista imutável de pontos de recurso;
+- uma lista fixa de pontos de recurso, cada um com sua própria fila e semáforo;
 - contador de recursos armazenados;
 - limite populacional;
 - gerador pseudoaleatório próprio;
@@ -141,14 +141,17 @@ As quatro civilizações usarão os mesmos parâmetros. Os mapas serão equivale
 - cada território recebe uma quantidade fixa de pontos no início;
 - a posição dos pontos não muda;
 - um ponto nunca é consumido, removido ou esgotado;
-- cada rota aceita no máximo dez agentes atribuídos enquanto existirem alternativas;
+- cada ponto permite uma coleta simultânea por padrão, controlada por `SemaphoreSlim`;
+- quem não obtém uma vaga aguarda na fila do próprio ponto;
+- a fila pode usar FCFS ou prioridade por nível com aging;
+- cada rota aceita no máximo 28 agentes atribuídos enquanto existirem alternativas;
 - a ocupação das rotas é reconstruída a cada ciclo e pertence à civilização;
 - coletar cria uma unidade carregada pelo agente;
 - a quantidade armazenada na base aumenta quando o agente entrega a unidade.
 
-A **lista de pontos é finita**, enquanto o **estoque de cada ponto é renovável**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população. O limite de dez agentes controla a ocupação visual da rota, não o estoque do ponto.
+A **lista de pontos é finita**, enquanto o **estoque de cada ponto é renovável**. Não devem surgir novos pontos durante a execução, pois isso faria a memória e o custo da busca crescerem por um motivo diferente da população. O limite de 28 agentes controla a ocupação visual da rota, não o estoque do ponto. Com 256 pontos, existem 7.168 vagas de roteamento por civilização, quantidade suficiente para a população máxima de 7.000.
 
-Como os pontos são imutáveis e pertencem a uma única civilização, a busca não precisa bloquear outros workers.
+As posições e o estoque renovável não mudam. O estado interno de cada ponto contém somente a fila, os coletores ativos e o semáforo de capacidade. A tentativa de obter uma vaga é não bloqueante para que um aldeão esperando não pare o worker responsável por toda a civilização.
 
 ### 6.3 Agentes
 
@@ -166,6 +169,7 @@ Cada agente terá, no mínimo:
 - indicação de que está carregando uma unidade;
 - instante real em que começou a coleta;
 - identificador da civilização.
+- nível de prioridade entre 1 e 5.
 
 Estados:
 
@@ -173,6 +177,8 @@ Estados:
 Searching
     ↓
 MovingToResource
+    ↓
+WaitingForResource
     ↓
 Collecting
     ↓
@@ -189,10 +195,12 @@ Comportamento:
 2. calcula a distância e a pontuação de cada ponto;
 3. escolhe a rota de menor pontuação que ainda possui capacidade;
 4. move-se até ele;
-5. aguarda o tempo real de coleta;
-6. carrega uma unidade;
-7. retorna ao seu ponto de depósito dentro da área da base;
-8. deposita a unidade e reinicia o ciclo.
+5. entra na fila do recurso;
+6. o escalonador escolhe o próximo agente por FCFS ou prioridade com aging;
+7. o agente obtém uma vaga do semáforo e aguarda o tempo real de coleta;
+8. carrega uma unidade e libera a vaga;
+9. retorna ao seu ponto de depósito dentro da área da base;
+10. deposita a unidade e reinicia o ciclo.
 
 Cada agente possui uma preferência pseudoaleatória determinística, derivada de seu identificador, civilização e número da viagem. A escolha usa:
 
@@ -422,7 +430,7 @@ Cada civilização será atualizada por somente um worker em cada ciclo. Esse wo
 - nascimento de agentes;
 - estatísticas internas da civilização.
 
-Os pontos de recurso serão imutáveis depois da inicialização. Cada civilização terá seu próprio gerador pseudoaleatório; não haverá um `Random` global compartilhado.
+As posições dos pontos de recurso permanecerão imutáveis depois da inicialização; somente fila, ocupação e métricas internas serão atualizadas. Cada civilização terá seu próprio gerador pseudoaleatório; não haverá um `Random` global compartilhado.
 
 A thread principal só lerá o estado depois que todos os workers concluírem o ciclo e antes de liberá-los novamente. Essa regra é preferível a espalhar `lock` pelas entidades.
 
@@ -551,6 +559,16 @@ O Stress Test:
 
 Isso permite aproximar a aplicação do limite com segurança e sem uma queda abrupta causada por uma única alocação enorme.
 
+### Escalonamento dos recursos
+
+- o botão `Fila` e a tecla `P` alternam entre FCFS e prioridade;
+- FCFS preserva a ordem de chegada;
+- no modo de prioridade, aldeões de maior nível coletam primeiro;
+- a cada segundo de espera o agente recebe um ponto de prioridade efetiva, limitado ao nível máximo;
+- ao empatar, vence quem chegou primeiro;
+- esse aging impede que níveis baixos esperem indefinidamente;
+- a coleta é não preemptiva e a vaga é liberada somente ao terminar.
+
 ---
 
 ## 16. Parâmetros iniciais configuráveis
@@ -561,13 +579,18 @@ Os valores abaixo são pontos de partida. Devem ficar centralizados em `Simulati
 |---|---:|
 | Civilizações | 4 |
 | População inicial por civilização | 10 |
-| Pontos de recurso por civilização | 768 |
+| Pontos de recurso por civilização | 256 |
 | Estoque do ponto de recurso | Renovável/inesgotável |
-| Máximo de agentes por rota | 10 |
+| Máximo de agentes por rota | 28 |
+| Coletores simultâneos por ponto | 1 |
+| Níveis dos aldeões | 1 a 5 |
+| Intervalo do aging | 1 s |
+| Escalonamento inicial | Prioridade com aging |
 | Pontos de depósito por base | 80 (grade 16 × 5) |
-| Unidade carregada por viagem | 1 |
+| Unidades carregadas por viagem | 2 |
 | Custo inicial de um agente | 10 unidades |
-| Duração real da coleta | 0,25 s |
+| Tempo de coleta por unidade | 1 s |
+| Duração total da coleta local | 2 s |
 | Intervalo do nascimento natural | 0,05 s |
 | Velocidade do agente | 80 px/s |
 | Limite por civilização | 7.000 |
@@ -685,8 +708,8 @@ Ambiente da medição:
 - 16 processadores lógicos disponíveis;
 - build `Release`, fora do depurador;
 - 4.000 agentes no total;
-- 768 pontos de recurso renováveis por civilização;
-- rotas distribuídas com até dez agentes atribuídos por ponto;
+- 256 pontos de recurso renováveis por civilização;
+- rotas distribuídas com até 28 agentes atribuídos por ponto;
 - aquecimento de 3 segundos;
 - três repetições de 10 segundos por modo.
 

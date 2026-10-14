@@ -1,4 +1,5 @@
 using C12ProjetoCiv.Concurrency;
+using C12ProjetoCiv.Simulation;
 
 namespace C12ProjetoCiv.Core;
 
@@ -13,12 +14,18 @@ public sealed record SimulationConfig
     public int Seed { get; init; } = 12062026;
     public int CivilizationCount { get; init; } = 4;
     public int InitialPopulationPerCivilization { get; init; } = 10;
-    public int ResourceNodesPerCivilization { get; init; } = 768;
+    public int ResourceNodesPerCivilization { get; init; } = 256;
     public int MaxPopulationPerCivilization { get; init; } = 7_000;
 
     public int AgentCost { get; init; } = 10;
-    public int ResourceUnitsPerDelivery { get; init; } = 1;
-    public int MaxAgentsPerResourceRoute { get; init; } = 10;
+    public int ResourceUnitsPerDelivery { get; init; } = 2;
+    public double CollectionSecondsPerResourceUnit { get; init; } = 1.0;
+    public int MaxAgentsPerResourceRoute { get; init; } = 28;
+    public int ResourceCollectionCapacity { get; init; } = 1;
+    public int AgentLevelCount { get; init; } = 5;
+    public double ResourcePriorityAgingSeconds { get; init; } = 1.0;
+    public ResourceSchedulingMode DefaultResourceSchedulingMode { get; init; } =
+        ResourceSchedulingMode.Priority;
     public float ResourceOccupancyWeight { get; init; } = 2f;
     public float ResourceDistanceWeight { get; init; } = 0.35f;
     public float ResourcePreferenceWeight { get; init; } = 1f;
@@ -29,7 +36,8 @@ public sealed record SimulationConfig
     public int BaseDropOffRows { get; init; } = 5;
     public float BaseDropOffWidth { get; init; } = 104f;
     public float BaseDropOffHeight { get; init; } = 36f;
-    public double CollectionDurationSeconds { get; init; } = 0.25;
+    public double CollectionDurationSeconds =>
+        ResourceUnitsPerDelivery * CollectionSecondsPerResourceUnit;
     public double NaturalSpawnIntervalSeconds { get; init; } = 0.05;
     public double StressSpawnIntervalSeconds { get; init; } = 0.05;
     public int StressSpawnBatchPerCivilization { get; init; } = 2;
@@ -88,6 +96,11 @@ public sealed record SimulationConfig
         }
 
         if (MaxAgentsPerResourceRoute <= 0 ||
+            ResourceCollectionCapacity <= 0 ||
+            AgentLevelCount <= 0 ||
+            ResourcePriorityAgingSeconds <= 0 ||
+            ResourceUnitsPerDelivery <= 0 ||
+            CollectionSecondsPerResourceUnit < 0 ||
             ResourceOccupancyWeight <= 0 ||
             ResourceDistanceWeight < 0 ||
             ResourcePreferenceWeight < 0)

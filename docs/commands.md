@@ -63,7 +63,7 @@ Executar os testes internos:
 O resultado esperado é:
 
 ```text
-19/19 testes passaram.
+22/22 testes passaram.
 ```
 
 Sequência recomendada para preparar tudo:
@@ -90,6 +90,7 @@ Depois disso, abrir a aplicação:
 | `2` | Usar 2 workers de simulação |
 | `4` | Usar 4 workers de simulação |
 | `S` | Ativar ou desativar o Stress Test |
+| `P` | Alternar a fila dos recursos entre FCFS e prioridade com aging |
 | `Espaço` | Pausar ou continuar |
 | `R` | Reiniciar a simulação |
 | `F11` | Alternar entre tela cheia e modo janela |
@@ -130,6 +131,14 @@ O .NET e o sistema operacional podem criar outras threads internas. A apresenta�
 8. Comparar o `Simulation Time` e o FPS.
 9. Se o crescimento tiver sido bloqueado, mostrar que ele volta quando o FPS permanece em pelo menos 15 por dois segundos.
 10. Pressionar `Esc` para fechar.
+
+### Escalonamento dos aldeões nos recursos
+
+1. Observar o botão `Fila: PRIORIDADE` e os níveis dos aldeões, representados por tons diferentes da cor da civilização.
+2. Mostrar, no rótulo de cada civilização, quantos agentes estão na fila, quantos estão coletando e a espera média.
+3. Pressionar `P` para usar FCFS: quem chegou primeiro coleta primeiro.
+4. Pressionar `P` novamente para usar prioridade: o maior nível coleta primeiro.
+5. Explicar que cada ponto possui um `SemaphoreSlim` com uma vaga e que o aging aumenta a prioridade de quem espera, evitando starvation.
 
 ### Condição de corrida na mina
 

@@ -112,6 +112,7 @@ public sealed class Renderer
             72,
             17,
             Text);
+        Raylib.DrawText("Nível: 1 escuro -> 5 claro", 1_370, 74, 14, MutedText);
 
         string growthText = GetGrowthText(
             view.GrowthController.State,
@@ -166,7 +167,16 @@ public sealed class Renderer
         }
 
         DrawButton(UiLayout.ScalingButton, "Escalabilidade", view.ScalingView is not null);
-        Raylib.DrawText("Atalhos: 1/2/4, Espaço, R, S, M, B, E, F11", 1_000, 99, 16, MutedText);
+        DrawButton(
+            UiLayout.ResourceSchedulingButton,
+            $"Fila: {view.ResourceSchedulingMode.ShortName()}",
+            view.ResourceSchedulingMode == ResourceSchedulingMode.Priority);
+        Raylib.DrawText(
+            "Atalhos: 1/2/4, Espaço, R, S, P, M, B, E, F11",
+            1_000,
+            99,
+            16,
+            MutedText);
     }
 
     private static void DrawCivilization(
@@ -221,12 +231,13 @@ public sealed class Renderer
 
         foreach (Agent agent in civilization.Agents)
         {
+            Color agentColor = GetAgentLevelColor(accent, agent.Level, config.AgentLevelCount);
             Raylib.DrawRectangle(
                 (int)agent.Position.X - (diameter / 2),
                 (int)agent.Position.Y - (diameter / 2),
                 diameter,
                 diameter,
-                accent);
+                agentColor);
 
             if (agent.IsCarryingResource)
             {
@@ -240,7 +251,7 @@ public sealed class Renderer
         // O rótulo fica na borda oposta à mina central, para não cobrir a disputa.
         bool bottomRow = civilization.BasePosition.Y < territory.Center.Y;
         int labelY = bottomRow
-            ? (int)(territory.Y + territory.Height) - 46
+            ? (int)(territory.Y + territory.Height) - 64
             : (int)territory.Y + 9;
         Raylib.DrawText(
             $"Civilização {civilization.Name}  |  Worker {workerNumber} (Thread ID {managedThreadId})",
@@ -256,6 +267,14 @@ public sealed class Renderer
             (int)territory.X + 12,
             labelY + 20,
             15,
+            MutedText);
+        Raylib.DrawText(
+            $"Fila local: {Format(civilization.LocalResourceWaiters, "N0")}  |  " +
+            $"Coletando: {Format(civilization.LocalResourceCollectors, "N0")}  |  " +
+            $"Espera média: {Format(civilization.AverageLocalResourceWaitSeconds, "F2")} s",
+            (int)territory.X + 12,
+            labelY + 38,
+            14,
             MutedText);
     }
 
@@ -829,6 +848,22 @@ public sealed class Renderer
         }
 
         return Math.Max(2, (int)MathF.Ceiling(configuredRadius * 2f));
+    }
+
+    private static Color GetAgentLevelColor(Color civilizationColor, int level, int maximumLevel)
+    {
+        if (maximumLevel <= 1)
+        {
+            return civilizationColor;
+        }
+
+        float strength = (level - 1f) / (maximumLevel - 1f);
+        float brightness = 0.55f + (strength * 0.45f);
+        return new Color(
+            (byte)Math.Clamp(civilizationColor.R * brightness, 0, 255),
+            (byte)Math.Clamp(civilizationColor.G * brightness, 0, 255),
+            (byte)Math.Clamp(civilizationColor.B * brightness, 0, 255),
+            civilizationColor.A);
     }
 
     private void UpdateDisplayMetrics(

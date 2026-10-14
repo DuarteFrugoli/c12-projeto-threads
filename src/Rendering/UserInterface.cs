@@ -12,6 +12,7 @@ public static class UserInterface
         bool togglePause = Raylib.IsKeyPressed(KeyboardKey.Space);
         bool restart = Raylib.IsKeyPressed(KeyboardKey.R);
         bool toggleStress = Raylib.IsKeyPressed(KeyboardKey.S);
+        bool cycleResourceScheduling = Raylib.IsKeyPressed(KeyboardKey.P);
         bool toggleFullscreen = Raylib.IsKeyPressed(KeyboardKey.F11);
         bool cycleMineSync = Raylib.IsKeyPressed(KeyboardKey.M);
         bool toggleBattles = Raylib.IsKeyPressed(KeyboardKey.B);
@@ -75,6 +76,10 @@ public static class UserInterface
             {
                 toggleScaling = true;
             }
+            else if (Contains(UiLayout.ResourceSchedulingButton, mouse))
+            {
+                cycleResourceScheduling = true;
+            }
         }
 
         return new UiCommand(
@@ -82,6 +87,7 @@ public static class UserInterface
             togglePause,
             restart,
             toggleStress,
+            cycleResourceScheduling,
             toggleFullscreen,
             cycleMineSync,
             toggleBattles,

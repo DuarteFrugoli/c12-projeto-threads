@@ -24,6 +24,7 @@ public sealed class Game : IDisposable
     private ConflictArbiter? _arbiter;
     private bool _paused;
     private bool _stressMode;
+    private ResourceSchedulingMode _resourceSchedulingMode;
     private bool _scalingViewOpen;
     private bool _pausedBeforeScaling;
     private bool _disposed;
@@ -33,6 +34,7 @@ public sealed class Game : IDisposable
     {
         _config = config;
         _config.Validate();
+        _resourceSchedulingMode = config.DefaultResourceSchedulingMode;
         _state = SimulationState.Create(config);
         _arbiter = CreateArbiter(_state);
         _coordinator = CreateCoordinator(_state, (int)initialMode);
@@ -93,7 +95,8 @@ public sealed class Game : IDisposable
                     deltaSeconds,
                     _clock.ElapsedSeconds,
                     _growthController.CanGrow,
-                    _stressMode);
+                    _stressMode,
+                    _resourceSchedulingMode);
                 long simulationStartedAt = Stopwatch.GetTimestamp();
                 _coordinator.ExecuteFrame(command);
                 long simulationCompletedAt = Stopwatch.GetTimestamp();
@@ -122,6 +125,7 @@ public sealed class Game : IDisposable
                 _clock.ElapsedSeconds,
                 _paused,
                 _stressMode,
+                _resourceSchedulingMode,
                 Raylib.IsWindowFullscreen()));
             Raylib.EndDrawing();
 
@@ -221,6 +225,11 @@ public sealed class Game : IDisposable
         if (command.ToggleStressMode)
         {
             _stressMode = !_stressMode;
+        }
+
+        if (command.CycleResourceSchedulingMode)
+        {
+            _resourceSchedulingMode = _resourceSchedulingMode.Next();
         }
 
         if (command.CycleMineSyncMode && _state.Mine is not null)
